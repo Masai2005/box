@@ -1,0 +1,76 @@
+# Ekilie Box release configuration.
+#
+#   git tag v0.1.0
+#   goreleaser release --clean
+#
+# The archive name is part of the product: `ekilie-box upgrade` downloads
+# ekilie-box_<version>_<os>_<arch>.zip and verifies it against checksums.txt, so keep the name_template below in sync
+# with internal/commands (upgrade.Config.ArchivePrefix/ArchiveExecutable).
+version: 2
+
+project_name: ekilie-box
+
+dist: .builds
+
+builds:
+  - id: ekilie-box
+    main: ./cmd/base
+    binary: ekilie-box
+    env:
+      - CGO_ENABLED=0
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w
+      - -X github.com/ekilie/box/internal/app.Version={{ .Version }}
+      - -X github.com/ekilie/box/internal/app.Commit={{ .ShortCommit }}
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+
+archives:
+  - id: ekilie-box
+    ids: [ekilie-box]
+    formats: [zip]
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    files:
+      - LICENSE
+      - README.md
+      - pocketone.yaml
+      - .env.example
+
+checksum:
+  name_template: checksums.txt
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-next"
+
+release:
+  draft: true
+  prerelease: auto
+  name_template: "Ekilie Box {{ .Tag }}"
+  header: |
+    ## Ekilie Box {{ .Tag }}
+
+    A single-file, all-in-one backend-in-a-box built on PocketOne/PocketBase.
+
+    Download the archive for your platform, unpack it, and run:
+
+    ```bash
+    ./ekilie-box serve
+    ```
+
+    Then open the dashboard at <http://127.0.0.1:8090/_/>.
+
+changelog:
+  use: git
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^chore:"
+      - "^test:"
