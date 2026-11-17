@@ -32,3 +32,13 @@ go.work.sum
 # Editor/IDE
 # .idea/
 # .vscode/
+
+# Ekilie Box build output
+/ekilie-box
+/ekilie-box.exe
+/.builds/
+
+# Runtime data
+/pb_data/
+.DS_Store
+
