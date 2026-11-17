@@ -8,10 +8,10 @@ LDFLAGS := -s -w -X github.com/ekilie/box/internal/app.Version=$(VERSION)
 all: build
 
 build:
-	CGO_ENABLED=0 go build -trimpath -ldflags "$(LDFLAGS)" -o $(BINARY) ./cmd/base
+	CGO_ENABLED=0 go build -trimpath -ldflags "$(LDFLAGS)" -o $(BINARY) ./cmd/box
 
 run:
-	CGO_ENABLED=0 go run -ldflags "$(LDFLAGS)" ./cmd/base serve
+	CGO_ENABLED=0 go run -ldflags "$(LDFLAGS)" ./cmd/box serve
 
 test:
 	go test ./...
