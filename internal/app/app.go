@@ -2,7 +2,7 @@
 //
 // It is the wiring layer: configuration, the standard PocketOne extension set, the optional static public directory, and
 // the serve/execute lifecycle. The UI is the stock PocketBase superuser dashboard; product commands live in
-// internal/commands and are added from the composition root (cmd/base/main.go).
+// internal/commands and are added from the composition root (cmd/box/main.go).
 package app
 
 import (
