@@ -1,11 +1,25 @@
 # Ekilie Box
 
+<!--toc:start-->
+
+- [Ekilie Box](#ekilie-box)
+  - [What's inside](#whats-inside)
+  - [Requirements](#requirements)
+  - [Build and run](#build-and-run)
+  - [The composition root](#the-composition-root)
+  - [Project layout](#project-layout)
+  - [Configuration](#configuration)
+  - [Static files](#static-files)
+  - [Commands](#commands)
+  - [Health and API](#health-and-api)
+  - [License](#license)
+
+<!--toc:end-->
+
 **A single-file, all-in-one "backend-in-a-box".**
 
 Ekilie Box compiles PocketOne/PocketBase, an embedded SQLite database, auth, file storage, realtime APIs, backups,
 point-in-time restore, JS hooks, MCP, API tokens, pages, bulk mail and deploy into one portable binary.
-
-It ships with **PocketBase's stock superuser dashboard** at `/_/`. There is no custom UI in this build.
 
 ```bash
 ./ekilie-box serve
@@ -20,17 +34,17 @@ It ships with **PocketBase's stock superuser dashboard** at `/_/`. There is no c
 
 The [standard PocketOne set](https://github.com/pockethost/pocketone) is registered on every start:
 
-| | |
-|---|---|
-| **Database** | Embedded SQLite with WAL, realtime subscriptions and a REST-ish records API |
-| **Auth** | Users, OAuth2, OTP, MFA, password reset, verification, access rules |
-| **Files** | Local or S3-compatible storage, thumbnails, protected files, signed redirects |
-| **Dashboard** | PocketBase's stock superuser UI at `/_/` |
-| **Extensions** | JS hooks, JS migrations, server-rendered pages (`pb_pages`) |
-| **Safety** | Scheduled backups and point-in-time restore (Litestream) |
-| **Agents** | MCP endpoint at `/mcp`, scoped API tokens (`pbt_…`) and an OAuth server |
-| **Mail** | App SMTP, bulk campaigns, suppression list, dev mail trap |
-| **Ops** | Logs, SQL console, crons, deploy/pull/logs, remote management, self-upgrade |
+|                |                                                                               |
+| -------------- | ----------------------------------------------------------------------------- |
+| **Database**   | Embedded SQLite with WAL, realtime subscriptions and a REST-ish records API   |
+| **Auth**       | Users, OAuth2, OTP, MFA, password reset, verification, access rules           |
+| **Files**      | Local or S3-compatible storage, thumbnails, protected files, signed redirects |
+| **Dashboard**  | PocketBase's stock superuser UI at `/_/`                                      |
+| **Extensions** | JS hooks, JS migrations, server-rendered pages (`pb_pages`)                   |
+| **Safety**     | Scheduled backups and point-in-time restore (Litestream)                      |
+| **Agents**     | MCP endpoint at `/mcp`, scoped API tokens (`pbt_…`) and an OAuth server       |
+| **Mail**       | App SMTP, bulk campaigns, suppression list, dev mail trap                     |
+| **Ops**        | Logs, SQL console, crons, deploy/pull/logs, remote management, self-upgrade   |
 
 Ekilie Box adds:
 
