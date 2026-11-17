@@ -75,7 +75,7 @@ make build
 Without the Makefile:
 
 ```bash
-CGO_ENABLED=0 go build -o ekilie-box ./cmd/base
+CGO_ENABLED=0 go build -o ekilie-box ./cmd/box
 ./ekilie-box serve
 ```
 
@@ -83,7 +83,7 @@ CGO_ENABLED=0 go build -o ekilie-box ./cmd/base
 
 ## The composition root
 
-`cmd/base/main.go` decides what the product is:
+`cmd/box/main.go` decides what the product is:
 
 ```go
 func main() {
@@ -112,7 +112,7 @@ func main() {
 ```
 .
 ├── cmd/
-│   └── base/
+│   └── box/
 │       └── main.go              composition root
 ├── internal/
 │   ├── app/                     PocketBase/PocketOne setup, config, static files
