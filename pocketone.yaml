@@ -1,0 +1,27 @@
+# Ekilie Box configuration.
+#
+# Every top-level key belongs to a linked extension. Run `ekilie-box config` to list every section this binary knows,
+# with its defaults and documentation. Secrets are referenced as $NAME and read from .env beside this file; they are
+# not exported to the app or JS hooks unless listed in app.env_allow.
+
+app:
+  dir: pb_data
+  hooks_dir: pb_hooks
+  migrations_dir: pb_migrations
+  index_fallback: true
+  # public_dir: ./pb_public   # uncomment to serve a folder instead of the embedded landing page
+
+server:
+  http: 127.0.0.1:8090
+  # https: ":443"
+
+# Compact SQLite databases weekly. Admins can change this in Settings → Backups.
+vacuum:
+  enabled: true
+  every: 168h
+
+# Point-in-time restore. History is kept in pb_data/litestream/; restore from Settings → Backups.
+pitr:
+  enabled: true
+  retention: 72h
+  snapshot_interval: 24h
