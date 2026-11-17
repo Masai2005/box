@@ -5,9 +5,9 @@
 # not exported to the app or JS hooks unless listed in app.env_allow.
 
 app:
-  dir: pb_data
-  hooks_dir: pb_hooks
-  migrations_dir: pb_migrations
+  dir: ekilie_box_data
+  hooks_dir: ekilie_box_hooks
+  migrations_dir: ekilie_box_migrations
   index_fallback: true
   # public_dir: ./pb_public   # uncomment to serve a folder instead of the embedded landing page
 
