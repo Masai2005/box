@@ -14,7 +14,7 @@ dist: .builds
 
 builds:
   - id: ekilie-box
-    main: ./cmd/base
+    main: ./cmd/box
     binary: ekilie-box
     env:
       - CGO_ENABLED=0
