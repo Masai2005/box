@@ -40,5 +40,6 @@ go.work.sum
 
 # Runtime data
 /pb_data/
+/ekilie_box_data/
 .DS_Store
 
