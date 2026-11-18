@@ -9,7 +9,7 @@ app:
   hooks_dir: ekilie_box_hooks
   migrations_dir: ekilie_box_migrations
   index_fallback: true
-  # public_dir: ./pb_public   # uncomment to serve a folder instead of the embedded landing page
+  # public_dir: ./pb_public   # optional static files served at /
 
 server:
   http: 127.0.0.1:8090
@@ -20,7 +20,7 @@ vacuum:
   enabled: true
   every: 168h
 
-# Point-in-time restore. History is kept in pb_data/litestream/; restore from Settings → Backups.
+# Point-in-time restore. History is kept in ekilie_box_data/litestream/; restore from Settings → Backups.
 pitr:
   enabled: true
   retention: 72h
