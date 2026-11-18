@@ -40,7 +40,7 @@ archives:
     files:
       - LICENSE
       - README.md
-      - pocketone.yaml
+      - ekiliebox.yaml
       - .env.example
 
 checksum:
