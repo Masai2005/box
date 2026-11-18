@@ -20,12 +20,21 @@ import (
 	"ganigeorgiev.com/pocketbase/pocketbase/plugins/migratecmd"
 	"ganigeorgiev.com/pocketbase/pocketbase/tools/hook"
 	"ganigeorgiev.com/pocketbase/pocketbase/tools/osutils"
+	"github.com/spf13/cobra"
 
 	"github.com/pockethost/pocketone/ext/config"
 	"github.com/pockethost/pocketone/ext/extkit"
 	"github.com/pockethost/pocketone/ext/jsvm"
 	"github.com/pockethost/pocketone/ext/pages"
 	"github.com/pockethost/pocketone/ext/standard"
+)
+
+const (
+	// ConfigFileName is the default config file. PocketOne's loader defaults to pocketone.yaml, so Ekilie Box resolves
+	// this name first and hands the path to the loader.
+	ConfigFileName = "ekiliebox.yaml"
+	// LegacyConfigFileName is still read when ekiliebox.yaml isn't present, so existing installs keep working.
+	LegacyConfigFileName = "pocketone.yaml"
 )
 
 // Build identity. GoReleaser stamps Version and Commit with -X.
@@ -90,16 +99,16 @@ type App struct {
 	IndexFallback bool
 }
 
-// New builds the app from the command line and the optional pocketone.yaml.
+// New builds the app from the command line and the optional ekiliebox.yaml.
 //
 // It does not start serving: extensions are added to App.Set by the composition root, and Start registers them
 // (contracts, JS APIs, dashboard screens) before executing the command tree.
 func New() (*App, error) {
 	product := DefaultProduct()
 
-	// pocketone.yaml, and its .env. FromArgs reads --config/--env-file before the full flag parse, because the app
+	// ekiliebox.yaml, and its .env. FromArgs reads --config/--env-file before the full flag parse, because the app
 	// section supplies the defaults of the flags below.
-	cfgOpts := config.FromArgs(os.Args[1:])
+	cfgOpts := resolveConfigOptions(config.FromArgs(os.Args[1:]))
 	cfg, err := config.Load(cfgOpts)
 	if err != nil {
 		return nil, err
@@ -123,10 +132,10 @@ func New() (*App, error) {
 
 	var cfgPath, envPath string
 	pb.RootCmd.PersistentFlags().StringVar(&cfgPath, "config", cfgOpts.ConfigPath,
-		"the config file (default ./pocketone.yaml, else next to the executable)")
+		"the config file (default ./ekiliebox.yaml, else next to the executable; pocketone.yaml is still read as a fallback)")
 	pb.RootCmd.PersistentFlags().StringVar(&envPath, "env-file", cfgOpts.EnvPath,
 		"secrets for $VAR references in the config file (default .env beside it); never passed to the app")
-	pb.RootCmd.AddCommand(config.NewCommand(func() config.Options { return cfgOpts }))
+	pb.RootCmd.AddCommand(configCommand(cfgOpts))
 
 	a := &App{
 		PB:      pb,
@@ -137,7 +146,7 @@ func New() (*App, error) {
 	a.Set.Providers = standard.ConfiguredProviders()
 
 	// ---------------------------------------------------------------
-	// Flags whose defaults come from pocketone.yaml's app section.
+	// Flags whose defaults come from ekiliebox.yaml's app section.
 	// ---------------------------------------------------------------
 
 	pb.RootCmd.PersistentFlags().StringVar(
@@ -226,7 +235,7 @@ func (a *App) Start() error {
 		Dir:          a.MigrationsDir,
 	})
 
-	// system commands: superuser and serve, with the pocketone.yaml server section as serve's defaults
+	// system commands: superuser and serve, with the ekiliebox.yaml server section as serve's defaults
 	serveCmd := cmd.NewServeCommand(a.PB, true)
 	srv, _ := config.Server.Get()
 	for flag, value := range map[string]string{
@@ -291,6 +300,49 @@ func defaultPublicDir() string {
 		return "ekilie_box_public"
 	}
 	return filepath.Join(filepath.Dir(exe), "ekilie_box_public")
+}
+
+// resolveConfigOptions picks ekiliebox.yaml (or the legacy pocketone.yaml) when --config wasn't given. The path is
+// handed to PocketOne's loader explicitly, because the loader's own default file name is pocketone.yaml.
+func resolveConfigOptions(opts config.Options) config.Options {
+	if opts.ConfigPath != "" {
+		return opts
+	}
+	for _, name := range []string{ConfigFileName, LegacyConfigFileName} {
+		if path := findConfigFile(name); path != "" {
+			opts.ConfigPath = path
+			return opts
+		}
+	}
+	return opts
+}
+
+// findConfigFile looks in the working directory, then next to the executable.
+func findConfigFile(name string) string {
+	if _, err := os.Stat(name); err == nil {
+		return name
+	}
+	exe, err := os.Executable()
+	if err != nil {
+		return ""
+	}
+	path := filepath.Join(filepath.Dir(exe), name)
+	if _, err := os.Stat(path); err == nil {
+		return path
+	}
+	return ""
+}
+
+// configCommand wraps PocketOne's config command and updates its help text to the Ekilie Box file name.
+func configCommand(opts config.Options) *cobra.Command {
+	cmd := config.NewCommand(func() config.Options { return opts })
+	cmd.Short = strings.ReplaceAll(cmd.Short, LegacyConfigFileName, ConfigFileName)
+	cmd.Long = strings.ReplaceAll(cmd.Long, LegacyConfigFileName, ConfigFileName)
+	for _, sub := range cmd.Commands() {
+		sub.Short = strings.ReplaceAll(sub.Short, LegacyConfigFileName, ConfigFileName)
+		sub.Long = strings.ReplaceAll(sub.Long, LegacyConfigFileName, ConfigFileName)
+	}
+	return cmd
 }
 
 // or returns *v when set, else def.
