@@ -117,7 +117,7 @@ func main() {
 }
 ```
 
-`internal/app` is the wiring layer: it loads `pocketone.yaml`, builds the PocketBase instance, holds the
+`internal/app` is the wiring layer: it loads `ekiliebox.yaml`, builds the PocketBase instance, holds the
 `standard.Set`, and serves an optional static directory. The admin UI is PocketBase's own.
 
 ## Project layout
@@ -131,7 +131,7 @@ func main() {
 │   ├── app/                     PocketBase/PocketOne setup, config, static files
 │   ├── commands/                `info`, `upgrade`
 │   └── extensions/              built-in extras: vacuum, mailtrap
-├── pocketone.yaml               example config
+├── ekiliebox.yaml               example config
 ├── .env.example                 secrets template
 ├── .goreleaser.yaml
 ├── Makefile
@@ -141,13 +141,14 @@ func main() {
 
 ## Configuration
 
-Ekilie Box reads `pocketone.yaml` (or `--config <path>`) and a `.env` beside it. Flags win over config values.
+Ekilie Box reads `ekiliebox.yaml` (or `--config <path>`) and a `.env` beside it. Flags win over config values.
+A legacy `pocketone.yaml` is still read when `ekiliebox.yaml` is not present.
 
 ```yaml
 app:
-  dir: pb_data
-  hooks_dir: pb_hooks
-  migrations_dir: pb_migrations
+  dir: ekilie_box_data
+  hooks_dir: ekilie_box_hooks
+  migrations_dir: ekilie_box_migrations
 
 server:
   http: 127.0.0.1:8090
@@ -186,7 +187,7 @@ If the directory does not exist, no static route is registered and `/` returns 4
 ./ekilie-box info               # version, engine, paths, dashboard URL
 ./ekilie-box info --json
 ./ekilie-box superuser upsert you@example.com 'a-strong-password'
-./ekilie-box migrate            # run pb_migrations
+./ekilie-box migrate            # run ekilie_box_migrations
 ./ekilie-box upgrade            # replace with the latest GitHub release, keep the old binary
 ```
 
