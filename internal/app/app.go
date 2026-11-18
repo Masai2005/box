@@ -144,19 +144,19 @@ func New() (*App, error) {
 		&a.HooksDir,
 		"hooksDir",
 		cfg.ResolvePath(appCfg.HooksDir),
-		"the directory with the JS app hooks (default pb_hooks next to pb_data)",
+		"the directory with the JS app hooks (default ekilie_box_hooks next to ekilie_box_data)",
 	)
 	pb.RootCmd.PersistentFlags().BoolVar(
 		&a.HooksWatch,
 		"hooksWatch",
 		or(appCfg.HooksWatch, true),
-		"auto restart the app on pb_hooks file change; it has no effect on Windows",
+		"auto restart the app on ekilie_box_hooks file change; it has no effect on Windows",
 	)
 	pb.RootCmd.PersistentFlags().StringVar(
 		&a.MigrationsDir,
 		"migrationsDir",
 		cfg.ResolvePath(appCfg.MigrationsDir),
-		"the directory with the user defined migrations (default pb_migrations next to pb_data)",
+		"the directory with the user defined migrations (default ekilie_box_migrations next to ekilie_box_data)",
 	)
 	pb.RootCmd.PersistentFlags().BoolVar(
 		&a.Automigrate,
@@ -173,7 +173,7 @@ func New() (*App, error) {
 		&a.PublicDir,
 		"publicDir",
 		publicDir,
-		"the directory to serve static files (default pb_public next to the executable)",
+		"the directory to serve static files (default ekilie_box_public next to the executable)",
 	)
 	pb.RootCmd.PersistentFlags().BoolVar(
 		&a.IndexFallback,
@@ -185,7 +185,7 @@ func New() (*App, error) {
 		&a.PagesDir,
 		"pagesDir",
 		"",
-		"the directory with the PocketPages app (default pb_pages next to pb_data); served when it exists",
+		"the directory with the PocketPages app (default ekilie_box_pages next to ekilie_box_data); served when it exists",
 	)
 
 	// Defaults are in; read the actual flags now, before Start registers the set with these values.
@@ -219,7 +219,7 @@ func (a *App) Start() error {
 		return err
 	}
 
-	// `ekilie-box migrate ...`, with JS templates for pb_hooks/pb_migrations
+	// `ekilie-box migrate ...`, with JS templates for ekilie_box_hooks/ekilie_box_migrations
 	migratecmd.MustRegister(a.PB, a.PB.RootCmd, migratecmd.Config{
 		TemplateLang: migratecmd.TemplateLangJS,
 		Automigrate:  a.Automigrate,
@@ -281,16 +281,16 @@ func (a *App) bindBase() {
 	})
 }
 
-// defaultPublicDir is pb_public next to the executable (or the working directory for go run).
+// defaultPublicDir is ekilie_box_public next to the executable (or the working directory for go run).
 func defaultPublicDir() string {
 	if osutils.IsProbablyGoRun() {
-		return "./pb_public"
+		return "./ekilie_box_public"
 	}
 	exe, err := os.Executable()
 	if err != nil {
-		return "pb_public"
+		return "ekilie_box_public"
 	}
-	return filepath.Join(filepath.Dir(exe), "pb_public")
+	return filepath.Join(filepath.Dir(exe), "ekilie_box_public")
 }
 
 // or returns *v when set, else def.
