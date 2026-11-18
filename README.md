@@ -54,16 +54,11 @@ Ekilie Box adds:
 ## Requirements
 
 - **Go 1.27+**
-- A **PocketOne** checkout. `go.mod` uses `replace` directives pointing at `../../go/pocketone`:
 
-  ```
-  box/                    <-- this repo
-  go/pocketone/           <-- PocketOne checkout
-  ```
-
-  If your PocketOne checkout lives elsewhere, update the paths in `go.mod`'s `replace` block. The `ext/*` packages are
-  not published as tagged Go modules, so a local checkout (or a fork such as `github.com/ekilie/pocketone`) is
-  expected.
+No local PocketOne checkout is needed. The PocketOne core and its `ext/*` modules are pinned to the
+[`ekilie/pocketone`](https://github.com/ekilie/pocketone) fork at commit `8c6d47e` in `go.mod`'s `replace` block, so
+`go mod tidy` and `go build` work on any machine with network access. PocketOne publishes the extensions as separate
+Go modules, which is why the replace block is explicit.
 
 ## Build and run
 
