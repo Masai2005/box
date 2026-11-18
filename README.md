@@ -60,6 +60,24 @@ No local PocketOne checkout is needed. The PocketOne core and its `ext/*` module
 `go mod tidy` and `go build` work on any machine with network access. PocketOne publishes the extensions as separate
 Go modules, which is why the replace block is explicit.
 
+### Updating PocketOne
+
+Go does not support a moving branch in `go.mod`: a branch name is resolved to an immutable commit pseudo-version, so
+the exact commit stays pinned and builds remain reproducible.
+
+To follow the fork's `main` without editing versions by hand:
+
+```bash
+# update the fork first, then
+make update-pocketone
+
+# or a specific branch/tag
+make update-pocketone REF=my-branch
+```
+
+The script resolves the fork at that ref, rewrites every PocketOne replace, and runs `go mod tidy`. Commit `go.mod`
+and `go.sum` afterwards.
+
 ## Build and run
 
 ```bash
