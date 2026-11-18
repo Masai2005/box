@@ -83,7 +83,7 @@ func infoCommand(box *app.App) *cobra.Command {
 			fmt.Fprintf(out, "  go         %s %s/%s\n", i.Go, i.OS, i.Arch)
 			fmt.Fprintf(out, "  data       %s\n", i.DataDir)
 			if i.ConfigFile == "" {
-				fmt.Fprintf(out, "  config     defaults (no pocketone.yaml)\n")
+				fmt.Fprintf(out, "  config     defaults (no ekiliebox.yaml)\n")
 			} else {
 				fmt.Fprintf(out, "  config     %s\n", i.ConfigFile)
 			}
