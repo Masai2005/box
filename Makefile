@@ -3,7 +3,9 @@ VERSION ?= $(patsubst v%,%,$(shell git describe --tags --always --dirty 2>/dev/n
 
 LDFLAGS := -s -w -X github.com/ekilie/box/internal/app.Version=$(VERSION)
 
-.PHONY: all build run test tidy clean release
+.PHONY: all build run test tidy clean release update-pocketone
+
+REF ?= main
 
 all: build
 
@@ -18,6 +20,10 @@ test:
 
 tidy:
 	go mod tidy
+
+# Move every PocketOne replace to the latest commit of the fork's main (or REF=branch/tag).
+update-pocketone:
+	sh scripts/update-pocketone.sh $(REF)
 
 clean:
 	rm -f $(BINARY) $(BINARY).exe
