@@ -18,11 +18,14 @@ import (
 	"github.com/ekilie/box/internal/app"
 	"github.com/ekilie/box/internal/commands"
 	"github.com/ekilie/box/internal/extensions"
+	"github.com/ekilie/box/internal/pkg/ascii"
 )
 
 func main() {
 	extkit.Command = app.Slug
 	extkit.Version = app.Version
+
+	ascii.PrintAscii()
 
 	box, err := app.New()
 	if err != nil {
