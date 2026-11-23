@@ -3,6 +3,7 @@ import { AlertTriangle, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button, Dialog, Input, Label, Select, Tabs, Textarea } from "@/components/ui";
 import { pb, errorMessage, type Json } from "@/lib/pb";
+import { discardChanges, useUnsavedChanges } from "@/lib/useUnsavedChanges";
 
 type Field = {
   id?: string;
@@ -109,39 +110,93 @@ export function CollectionDialog({
   const [indexes, setIndexes] = useState<string[]>([]);
   const [viewQuery, setViewQuery] = useState("");
   const [busy, setBusy] = useState(false);
+  const [baseline, setBaseline] = useState("");
 
   useEffect(() => {
     if (!open) return;
-    setTab("fields");
-    setName(collection?.name || "");
-    setType(collection?.type || "base");
-    setFields(
-      (collection?.fields || [])
-        .filter((field) => !SYSTEM_FIELDS.has(field.name) && !field.system)
-        .map((field) => ({
-          ...field,
-          values: field.values || [],
-          maxSelect: field.maxSelect || 1,
-        })),
-    );
-    const nextRules: Record<string, Rule> = {};
-    for (const [key] of RULES) nextRules[key] = toRule((collection as any)?.[key]);
-    setRules(nextRules);
-    setAuthRule(toRule(collection?.authRule));
-    setManageRule(toRule(collection?.manageRule));
-    setPasswordAuth({ enabled: collection?.passwordAuth?.enabled !== false });
-    setOtp({ enabled: Boolean(collection?.otp?.enabled) });
-    setMfa({ enabled: Boolean(collection?.mfa?.enabled) });
-    setOauth2({
+
+    const initialName = collection?.name || "";
+    const initialType = collection?.type || "base";
+    const initialFields = (collection?.fields || [])
+      .filter((field) => !SYSTEM_FIELDS.has(field.name) && !field.system)
+      .map((field) => ({
+        ...field,
+        values: field.values || [],
+        maxSelect: field.maxSelect || 1,
+      }));
+    const initialRules: Record<string, Rule> = {};
+    for (const [key] of RULES) initialRules[key] = toRule((collection as any)?.[key]);
+    const initialAuthRule = toRule(collection?.authRule);
+    const initialManageRule = toRule(collection?.manageRule);
+    const initialPasswordAuth = { enabled: collection?.passwordAuth?.enabled !== false };
+    const initialOtp = { enabled: Boolean(collection?.otp?.enabled) };
+    const initialMfa = { enabled: Boolean(collection?.mfa?.enabled) };
+    const initialOauth2 = {
       enabled: Boolean(collection?.oauth2?.enabled),
       providers: collection?.oauth2?.providers || [],
-    });
-    setProvidersJSON(JSON.stringify(collection?.oauth2?.providers || [], null, 2));
-    setIndexes(collection?.indexes || []);
-    setViewQuery(collection?.viewQuery || "");
+    };
+    const initialProvidersJSON = JSON.stringify(collection?.oauth2?.providers || [], null, 2);
+    const initialIndexes = collection?.indexes || [];
+    const initialViewQuery = collection?.viewQuery || "";
+
+    setTab("fields");
+    setName(initialName);
+    setType(initialType);
+    setFields(initialFields);
+    setRules(initialRules);
+    setAuthRule(initialAuthRule);
+    setManageRule(initialManageRule);
+    setPasswordAuth(initialPasswordAuth);
+    setOtp(initialOtp);
+    setMfa(initialMfa);
+    setOauth2(initialOauth2);
+    setProvidersJSON(initialProvidersJSON);
+    setIndexes(initialIndexes);
+    setViewQuery(initialViewQuery);
+    setBaseline(
+      JSON.stringify({
+        name: initialName,
+        type: initialType,
+        fields: initialFields,
+        rules: initialRules,
+        authRule: initialAuthRule,
+        manageRule: initialManageRule,
+        passwordAuth: initialPasswordAuth,
+        otp: initialOtp,
+        mfa: initialMfa,
+        oauth2: initialOauth2,
+        providersJSON: initialProvidersJSON,
+        indexes: initialIndexes,
+        viewQuery: initialViewQuery,
+      }),
+    );
   }, [open, collection]);
 
   const isEdit = Boolean(collection?.id);
+  const dirty =
+    open &&
+    baseline !== "" &&
+    baseline !==
+      JSON.stringify({
+        name,
+        type,
+        fields,
+        rules,
+        authRule,
+        manageRule,
+        passwordAuth,
+        otp,
+        mfa,
+        oauth2,
+        providersJSON,
+        indexes,
+        viewQuery,
+      });
+  useUnsavedChanges(dirty);
+
+  function close() {
+    discardChanges(dirty, onClose);
+  }
   const publicRules = useMemo(
     () => Object.entries(rules).filter(([, rule]) => rule.mode === "public").map(([key]) => key),
     [rules],
@@ -274,13 +329,13 @@ export function CollectionDialog({
   return (
     <Dialog
       open={open}
-      onClose={onClose}
+      onClose={close}
       title={isEdit ? `Edit ${collection?.name}` : "New collection"}
       description={isEdit ? "Fields, rules, auth, indexes and view query" : "Create a collection and its fields"}
       className="max-w-4xl"
       footer={
         <>
-          <Button variant="outline" onClick={onClose} disabled={busy}>
+          <Button variant="outline" onClick={close} disabled={busy}>
             Cancel
           </Button>
           <Button type="submit" form="collection-form" disabled={busy}>
