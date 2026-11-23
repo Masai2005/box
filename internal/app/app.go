@@ -1,12 +1,13 @@
 // Package app builds Ekilie Box's PocketOne/PocketBase application.
 //
 // It is the wiring layer: configuration, the standard PocketOne extension set, the optional static public directory, and
-// the serve/execute lifecycle. The UI is the stock PocketBase superuser dashboard; product commands live in
-// internal/commands and are added from the composition root (cmd/box/main.go).
+// the serve/execute lifecycle. The superuser console is the embedded SPA in internal/ui, served at /; product
+// commands live in internal/commands and are added from the composition root (cmd/box/main.go).
 package app
 
 import (
 	"fmt"
+	"io/fs"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -22,6 +23,7 @@ import (
 	"ganigeorgiev.com/pocketbase/pocketbase/tools/osutils"
 	"github.com/spf13/cobra"
 
+	"github.com/ekilie/box/internal/ui"
 	"github.com/pockethost/pocketone/ext/config"
 	"github.com/pockethost/pocketone/ext/extkit"
 	"github.com/pockethost/pocketone/ext/jsvm"
@@ -279,10 +281,27 @@ func (a *App) bindBase() {
 				return re.Next()
 			})
 
-			if !se.Router.HasRoute(http.MethodGet, "/{path...}") && a.PublicDir != "" {
-				if info, err := os.Stat(a.PublicDir); err == nil && info.IsDir() {
-					se.Router.GET("/{path...}", apis.Static(os.DirFS(a.PublicDir), a.IndexFallback))
+			if !se.Router.HasRoute(http.MethodGet, "/{path...}") {
+				// --publicDir (e.g. the Vite dev output) wins; otherwise serve the UI embedded in the binary.
+				var fsys fs.FS
+				if a.PublicDir != "" {
+					if info, err := os.Stat(a.PublicDir); err == nil && info.IsDir() {
+						fsys = os.DirFS(a.PublicDir)
+					}
 				}
+				if fsys == nil {
+					fsys = ui.FS()
+				}
+
+				static := apis.Static(fsys, a.IndexFallback)
+				se.Router.GET("/{path...}", func(re *core.RequestEvent) error {
+					p := re.Request.URL.Path
+					// never let the SPA swallow unknown API or stock dashboard paths
+					if strings.HasPrefix(p, "/api/") || strings.HasPrefix(p, "/_/") {
+						return re.NotFoundError("", nil)
+					}
+					return static(re)
+				})
 			}
 
 			return se.Next()
