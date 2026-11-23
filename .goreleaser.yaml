@@ -12,6 +12,10 @@ project_name: ekilie-box
 
 dist: .builds
 
+before:
+  hooks:
+    - bash -c "cd web && npm ci --no-audit --no-fund && npm run build"
+
 builds:
   - id: ekilie-box
     main: ./cmd/box
@@ -20,6 +24,7 @@ builds:
       - CGO_ENABLED=0
     flags:
       - -trimpath
+      - -tags=no_ui
     ldflags:
       - -s -w
       - -X github.com/ekilie/box/internal/app.Version={{ .Version }}

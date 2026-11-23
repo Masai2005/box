@@ -7,7 +7,8 @@
 //   - commands.Register adds `info` and `upgrade`;
 //   - Start registers the standard PocketOne extension set and runs the command tree.
 //
-// The UI is PocketBase's stock superuser dashboard at /_/, so it is not listed here.
+// The console is the embedded SPA in internal/ui, served at /. Release builds use -tags no_ui, so PocketBase's
+// stock dashboard is not included.
 package main
 
 import (

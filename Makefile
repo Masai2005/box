@@ -3,17 +3,25 @@ VERSION ?= $(patsubst v%,%,$(shell git describe --tags --always --dirty 2>/dev/n
 
 LDFLAGS := -s -w -X github.com/ekilie/box/internal/app.Version=$(VERSION)
 
-.PHONY: all build run test tidy clean release update-pocketone
+.PHONY: all ui build run dev-ui test tidy clean release update-pocketone
 
 REF ?= main
 
 all: build
 
-build:
-	CGO_ENABLED=0 go build -trimpath -ldflags "$(LDFLAGS)" -o $(BINARY) ./cmd/box
+# Build the superuser UI into internal/ui/dist, which is embedded in the binary.
+ui:
+	cd web && npm install --no-audit --no-fund && npm run build
 
-run:
-	CGO_ENABLED=0 go run -ldflags "$(LDFLAGS)" ./cmd/box serve
+# Vite dev server with /api and /_ proxied to the running Go process.
+dev-ui:
+	cd web && npm run dev
+
+build: ui
+	CGO_ENABLED=0 go build -tags no_ui -trimpath -ldflags "$(LDFLAGS)" -o $(BINARY) ./cmd/box
+
+run: ui
+	CGO_ENABLED=0 go run -tags no_ui -ldflags "$(LDFLAGS)" ./cmd/box serve
 
 test:
 	go test ./...
@@ -27,8 +35,8 @@ update-pocketone:
 
 clean:
 	rm -f $(BINARY) $(BINARY).exe
-	rm -rf .builds
+	rm -rf .builds web/node_modules
 
-# Requires goreleaser and the PocketOne checkout referenced by go.mod's replace directives.
+# Requires goreleaser, npm and the PocketOne checkout referenced by go.mod's replace directives.
 release:
 	goreleaser release --clean

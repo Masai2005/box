@@ -1,126 +1,103 @@
 # Ekilie Box
 
-<!--toc:start-->
-
-- [Ekilie Box](#ekilie-box)
-  - [What's inside](#whats-inside)
-  - [Requirements](#requirements)
-  - [Build and run](#build-and-run)
-  - [The composition root](#the-composition-root)
-  - [Project layout](#project-layout)
-  - [Configuration](#configuration)
-  - [Static files](#static-files)
-  - [Commands](#commands)
-  - [Health and API](#health-and-api)
-  - [License](#license)
-
-<!--toc:end-->
-
-**A single-file, all-in-one "backend-in-a-box".**
+**A single-file, all-in-one "backend-in-a-box" with a custom Ekilie Cloud-style superuser UI.**
 
 Ekilie Box compiles PocketOne/PocketBase, an embedded SQLite database, auth, file storage, realtime APIs, backups,
-point-in-time restore, JS hooks, MCP, API tokens, pages, bulk mail and deploy into one portable binary.
+point-in-time restore, JS hooks, MCP, API tokens, pages, bulk mail and deploy into one portable binary — plus its own
+superuser console built with React, TanStack Router and Tailwind.
 
-```bash
-./ekilie-box serve
-```
-
-```
-> Dashboard: http://127.0.0.1:8090/_/
-> REST API:  http://127.0.0.1:8090/api/
-```
-
-## What's inside
-
-The [standard PocketOne set](https://github.com/pockethost/pocketone) is registered on every start:
-
-|                |                                                                               |
-| -------------- | ----------------------------------------------------------------------------- |
-| **Database**   | Embedded SQLite with WAL, realtime subscriptions and a REST-ish records API   |
-| **Auth**       | Users, OAuth2, OTP, MFA, password reset, verification, access rules           |
-| **Files**      | Local or S3-compatible storage, thumbnails, protected files, signed redirects |
-| **Dashboard**  | PocketBase's stock superuser UI at `/_/`                                      |
-| **Extensions** | JS hooks, JS migrations, server-rendered pages (`pb_pages`)                   |
-| **Safety**     | Scheduled backups and point-in-time restore (Litestream)                      |
-| **Agents**     | MCP endpoint at `/mcp`, scoped API tokens (`pbt_…`) and an OAuth server       |
-| **Mail**       | App SMTP, bulk campaigns, suppression list, dev mail trap                     |
-| **Ops**        | Logs, SQL console, crons, deploy/pull/logs, remote management, self-upgrade   |
-
-Ekilie Box adds:
-
-- **Vacuum** and **dev mail trap** extensions.
-- **`info`** and **`upgrade`** product commands.
-
-## Requirements
-
-- **Go 1.27+**
-
-No local PocketOne checkout is needed. The PocketOne core and its `ext/*` modules are pinned to the
-[`ekilie/pocketone`](https://github.com/ekilie/pocketone) fork at commit `8c6d47e` in `go.mod`'s `replace` block, so
-`go mod tidy` and `go build` work on any machine with network access. PocketOne publishes the extensions as separate
-Go modules, which is why the replace block is explicit.
-
-### Updating PocketOne
-
-Go does not support a moving branch in `go.mod`: a branch name is resolved to an immutable commit pseudo-version, so
-the exact commit stays pinned and builds remain reproducible.
-
-To follow the fork's `main` without editing versions by hand:
-
-```bash
-# update the fork first, then
-make update-pocketone
-
-# or a specific branch/tag
-make update-pocketone REF=my-branch
-```
-
-The script resolves the fork at that ref, rewrites every PocketOne replace, and runs `go mod tidy`. Commit `go.mod`
-and `go.sum` afterwards.
-
-## Build and run
+This is **not a SaaS**: there is one account type (the superuser) and one console. No customer UI, no `users`
+collection requirement, no tenancy.
 
 ```bash
 make build
 ./ekilie-box serve
 ```
 
-Without the Makefile:
+```
+> Console: http://127.0.0.1:8090/
+> REST API: http://127.0.0.1:8090/api/
+```
+
+The stock PocketBase dashboard is not part of release builds (`-tags no_ui`). `/` is your console; `/api/...` is the
+backend.
+
+<p align="center">
+  <img src="docs/images/console-collections.png" alt="Ekilie Box superuser console — collections view" width="100%" />
+</p>
+
+
+## Console
+
+- Login with the PocketBase `_superusers` account.
+- Dashboard overview with collections, superusers, backups, cron jobs and recent logs.
+- Collections: browse collections, filter/paginate records, create/edit/delete records, dynamic field form, file
+  uploads, realtime refresh, API preview, schema/rules editor and system collections.
+- Logs: volume chart, filters, levels, log detail and log retention settings.
+- Settings: application, mail/SMTP, storage/S3, backups/restore/PITR/vacuum, crons, API tokens, SQL console and
+  collection export/import.
+- Bulk mail: campaigns and suppressions.
+- Ekilie Cloud design: warm paper, near-black ink, orange accent, dot grid, 2px rules, square corners, mono labels,
+  light/dark themes, responsive sidebar with an icon rail, tooltips and a Cmd/Ctrl+B toggle.
+
+Screens are single-superuser only; every API call uses `pb.collection("_superusers")` auth.
+
+## Requirements
+
+- **Go 1.27+**
+- **Node.js 20+** (only to build the console)
+- No local PocketOne checkout is needed. PocketOne core and its `ext/*` modules are pinned to the
+  [`ekilie/pocketone`](https://github.com/ekilie/pocketone) fork in `go.mod`'s `replace` block, so `go mod tidy` and
+  `go build` work on any machine with network access.
+
+### Updating PocketOne
+
+Go does not support a moving branch in `go.mod`; a branch name is resolved to an immutable commit pseudo-version.
+To follow the fork's `main` without editing versions by hand:
 
 ```bash
-CGO_ENABLED=0 go build -o ekilie-box ./cmd/box
-./ekilie-box serve
+make update-pocketone
+# or
+make update-pocketone REF=my-branch
+```
+
+The script rewrites every PocketOne replace and runs `go mod tidy`. Commit `go.mod` and `go.sum` afterwards.
+
+## Build and run
+
+```bash
+# Build the console into internal/ui/dist, then the binary with no stock UI
+make build
+
+# Run without building the console (uses the committed dist)
+go run -tags no_ui ./cmd/box serve
+
+# UI hot reload: Vite proxies /api and /_ to the Go process on :8090
+make dev-ui
+go run -tags no_ui ./cmd/box serve
 ```
 
 `CGO_ENABLED=0` uses the pure-Go SQLite driver, so the result is a single statically linked executable.
 
-## The composition root
+### First superuser
 
-`cmd/box/main.go` decides what the product is:
+There is no public signup. Create the only account from the CLI:
 
-```go
-func main() {
-    extkit.Command = app.Slug
-    extkit.Version = app.Version
-
-    box, err := app.New()
-    if err != nil {
-        log.Fatal(err)
-    }
-
-    extensions.Register(box) // vacuum, mail trap
-    commands.Register(box)   // info, upgrade
-
-    if err := box.Start(); err != nil {
-        log.Fatal(err)
-    }
-}
+```bash
+./ekilie-box superuser upsert you@example.com 'a-strong-password'
 ```
 
-`internal/app` is the wiring layer: it loads `ekiliebox.yaml`, builds the PocketBase instance, holds the
-`standard.Set`, and serves an optional static directory. The admin UI is PocketBase's own.
+Then open `http://127.0.0.1:8090/` and sign in.
 
-## Project layout
+### Security
+
+Lock collection API rules to `null` (superuser-only) or set explicit rules. Superusers bypass API rules, so the
+console keeps working while anonymous requests are denied.
+
+File downloads are public by default in PocketBase. To protect uploaded files, mark the file field as **Protected**
+in the collection editor. Protected downloads then require a file token or a matching view rule.
+
+## Architecture
 
 ```
 .
@@ -128,16 +105,37 @@ func main() {
 │   └── box/
 │       └── main.go              composition root
 ├── internal/
-│   ├── app/                     PocketBase/PocketOne setup, config, static files
+│   ├── app/                     PocketBase/PocketOne setup, config, static serving
 │   ├── commands/                `info`, `upgrade`
-│   └── extensions/              built-in extras: vacuum, mailtrap
+│   ├── extensions/              vacuum, dev mailtrap
+│   └── ui/                      //go:embed dist
+│       └── dist/                built console (committed so `go build` works without Node)
+├── web/                         React + TanStack Router + Tailwind console
+│   ├── src/
+│   │   ├── components/
+│   │   ├── pages/
+│   │   ├── lib/
+│   │   └── router.tsx
+│   ├── public/
+│   └── package.json
 ├── ekiliebox.yaml               example config
-├── .env.example                 secrets template
+├── .env.example
 ├── .goreleaser.yaml
 ├── Makefile
 ├── go.mod
 └── go.sum
 ```
+
+The Go process serves:
+
+```
+GET /             -> embedded console (SPA fallback for client routes)
+GET /assets/...   -> console assets
+GET /api/...      -> PocketBase/PocketOne API
+GET /_/           -> not built (release uses -tags no_ui)
+```
+
+`--publicDir` can override the embedded UI with a directory (useful for debugging a Vite build from disk).
 
 ## Configuration
 
@@ -169,22 +167,11 @@ List every section this binary understands:
 ./ekilie-box config --json
 ```
 
-## Static files
-
-There is no embedded site. To serve a `pb_public` folder at `/`, use the default directory next to the executable or
-set it explicitly:
-
-```bash
-./ekilie-box serve --publicDir ./pb_public
-```
-
-If the directory does not exist, no static route is registered and `/` returns 404; the dashboard stays at `/_/`.
-
 ## Commands
 
 ```bash
 ./ekilie-box serve              # start the app
-./ekilie-box info               # version, engine, paths, dashboard URL
+./ekilie-box info               # version, engine, paths, console URL
 ./ekilie-box info --json
 ./ekilie-box superuser upsert you@example.com 'a-strong-password'
 ./ekilie-box migrate            # run ekilie_box_migrations
@@ -199,8 +186,8 @@ PocketOne's contract commands are also available (`remote`, `deploy`, `dev`, `pu
 
 ## Health and API
 
-- `GET /api/health` — public health check; the `X-Powered-By` header is `Ekilie Box <version>`.
-- `GET /_/` — PocketBase's stock superuser dashboard.
+- `GET /api/health` — public health check; `X-Powered-By` is `Ekilie Box <version>`.
+- `GET /` — the custom console.
 - `GET /api/...` — records, auth, files, realtime, settings and contract APIs.
 
 ## License
