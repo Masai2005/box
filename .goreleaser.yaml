@@ -61,15 +61,16 @@ release:
   header: |
     ## Ekilie Box {{ .Tag }}
 
-    A single-file, all-in-one backend-in-a-box built on PocketOne/PocketBase.
+    The backend-in-a-box built by Ekilie.
 
     Download the archive for your platform, unpack it, and run:
 
     ```bash
+    ./ekilie-box superuser upsert you@example.com 'a-strong-password'
     ./ekilie-box serve
     ```
 
-    Then open the dashboard at <http://127.0.0.1:8090/_/>.
+    Then open the console at <http://127.0.0.1:8090/>.
 
 changelog:
   use: git
