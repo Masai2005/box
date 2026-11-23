@@ -14,6 +14,7 @@ type Field = {
   values?: string[];
   maxSelect?: number;
   collectionId?: string;
+  protected?: boolean;
   options?: Json;
 };
 
@@ -140,6 +141,7 @@ export function CollectionDialog({
       }
       if (field.type === "file") {
         next.maxSelect = Math.max(1, Number(field.maxSelect) || 1);
+        next.protected = Boolean(field.protected);
       }
       if (field.type === "relation") {
         next.collectionId = field.collectionId || "";
@@ -293,16 +295,29 @@ export function CollectionDialog({
                 ) : null}
 
                 {field.type === "file" ? (
-                  <div className="sm:col-span-2">
-                    <Label>Max files</Label>
-                    <Input
-                      type="number"
-                      min={1}
-                      value={field.maxSelect || 1}
-                      onChange={(event) =>
-                        updateField(index, { maxSelect: Number(event.target.value) })
-                      }
-                    />
+                  <div className="grid gap-2 sm:col-span-4 sm:grid-cols-2">
+                    <div>
+                      <Label>Max files</Label>
+                      <Input
+                        type="number"
+                        min={1}
+                        value={field.maxSelect || 1}
+                        onChange={(event) =>
+                          updateField(index, { maxSelect: Number(event.target.value) })
+                        }
+                      />
+                    </div>
+                    <label className="flex items-end gap-2 pb-2 font-mono text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
+                      <input
+                        type="checkbox"
+                        checked={Boolean(field.protected)}
+                        onChange={(event) =>
+                          updateField(index, { protected: event.target.checked })
+                        }
+                        className="h-4 w-4 accent-[hsl(var(--accent))]"
+                      />
+                      Protected downloads
+                    </label>
                   </div>
                 ) : null}
 
