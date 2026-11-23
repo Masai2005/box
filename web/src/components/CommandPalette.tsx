@@ -24,11 +24,28 @@ import { useTheme } from "@/components/ThemeProvider";
 import { pb } from "@/lib/pb";
 import { cn } from "@/lib/utils";
 
+type CollectionSummary = {
+  id: string;
+  name: string;
+  type: string;
+  system?: boolean;
+  fields?: { name: string; type: string; hidden?: boolean; system?: boolean }[];
+};
+
+type RecordResult = {
+  id: string;
+  recordId: string;
+  collection: string;
+  label: string;
+  detail: string;
+};
+
 type Action = {
   id: string;
   label: string;
   group: string;
   icon: typeof Search;
+  detail?: string;
   run: () => void | Promise<void>;
 };
 
@@ -43,9 +60,12 @@ export function CommandPalette({
   const { logout } = useAuth();
   const { setTheme, resolvedTheme } = useTheme();
   const [query, setQuery] = useState("");
-  const [collections, setCollections] = useState<{ id: string; name: string }[]>([]);
+  const [collections, setCollections] = useState<CollectionSummary[]>([]);
+  const [records, setRecords] = useState<RecordResult[]>([]);
+  const [searching, setSearching] = useState(false);
   const [active, setActive] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
+  const searchId = useRef(0);
 
   useEffect(() => {
     if (!open) return;
@@ -54,9 +74,70 @@ export function CommandPalette({
     setTimeout(() => inputRef.current?.focus(), 30);
     pb.collections
       .getFullList({ sort: "name" })
-      .then((list) => setCollections(list as { id: string; name: string }[]))
+      .then((list) => setCollections(list as CollectionSummary[]))
       .catch(() => {});
   }, [open]);
+
+  useEffect(() => {
+    const term = query.trim();
+    const id = ++searchId.current;
+    if (!open || term.length < 2) {
+      setRecords([]);
+      setSearching(false);
+      return;
+    }
+
+    setSearching(true);
+    const timer = setTimeout(async () => {
+      const text = term.replaceAll('"', '\\"');
+      const searchable = collections.filter(
+        (collection) => !collection.system && !collection.name.startsWith("_"),
+      );
+
+      const settled = await Promise.allSettled(
+        searchable.map(async (collection) => {
+          const fields = (collection.fields || [])
+            .filter(
+              (field) =>
+                !field.hidden &&
+                ["text", "email", "url", "editor", "select"].includes(field.type),
+            )
+            .slice(0, 5);
+
+          if (!fields.length) return [];
+
+          const filter = fields.map((field) => `${field.name} ~ "${text}"`).join(" || ");
+          const result = await pb.collection(collection.name).getList(1, 4, {
+            filter,
+            sort: "-updated",
+          });
+
+          const labelField = fields.find((field) =>
+            ["title", "name", "email", "slug", "label"].includes(field.name),
+          );
+
+          return result.items.map((record: any) => ({
+            id: `${collection.name}-${record.id}`,
+            recordId: record.id,
+            collection: collection.name,
+            label: String(record[labelField?.name || fields[0].name] || record.id),
+            detail: `${collection.name} · ${record.id.slice(0, 8)}`,
+          }));
+        }),
+      );
+
+      if (searchId.current !== id) return;
+
+      const found = settled
+        .flatMap((result) => (result.status === "fulfilled" ? result.value : []))
+        .slice(0, 20);
+
+      setRecords(found);
+      setSearching(false);
+    }, 250);
+
+    return () => clearTimeout(timer);
+  }, [open, query, collections]);
 
   const actions = useMemo<Action[]>(() => {
     const nav = (href: string) => () => {
@@ -127,8 +208,25 @@ export function CommandPalette({
       });
     }
 
+    for (const record of records) {
+      items.push({
+        id: `record-${record.id}`,
+        label: record.label,
+        group: "Records",
+        icon: Database,
+        detail: record.detail,
+        run: () => {
+          navigate({
+            to: "/collections",
+            search: { collection: record.collection, record: record.recordId } as any,
+          });
+          onClose();
+        },
+      });
+    }
+
     return items;
-  }, [collections, navigate, onClose, resolvedTheme, setTheme, logout]);
+  }, [collections, records, navigate, onClose, resolvedTheme, setTheme, logout]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -141,7 +239,7 @@ export function CommandPalette({
 
   useEffect(() => {
     setActive(0);
-  }, [query]);
+  }, [query, records.length]);
 
   if (!open) return null;
 
@@ -186,7 +284,8 @@ export function CommandPalette({
                 onClose();
               }
             }}
-            placeholder="Search pages, collections and actions…"
+            aria-label="Search pages, collections, actions and records"
+            placeholder="Search pages, collections, actions and records…"
             className="h-8 flex-1 bg-transparent font-mono text-xs outline-none placeholder:text-muted-foreground"
           />
           <kbd className="border border-border px-1.5 py-0.5 font-mono text-[9px] text-muted-foreground">
@@ -194,9 +293,15 @@ export function CommandPalette({
           </kbd>
         </div>
 
-        <div className="max-h-[60vh] overflow-y-auto p-2 scrollbar-thin">
+        <div
+          role="listbox"
+          aria-label="Search results"
+          className="max-h-[60vh] overflow-y-auto p-2 scrollbar-thin"
+        >
           {filtered.length === 0 ? (
-            <p className="px-3 py-8 text-center text-xs text-muted-foreground">No matches.</p>
+            <p className="px-3 py-8 text-center text-xs text-muted-foreground" aria-live="polite">
+              {searching ? "Searching records…" : "No matches."}
+            </p>
           ) : (
             Object.entries(groups).map(([group, items]) => (
               <div key={group} className="mb-2">
@@ -211,6 +316,8 @@ export function CommandPalette({
                     <button
                       key={action.id}
                       type="button"
+                      role="option"
+                      aria-selected={selected}
                       onMouseEnter={() => setActive(index)}
                       onClick={() => run(action)}
                       className={cn(
@@ -220,8 +327,13 @@ export function CommandPalette({
                           : "text-muted-foreground hover:bg-muted/50 hover:text-foreground",
                       )}
                     >
-                      <Icon className="h-3.5 w-3.5" />
+                      <Icon className="h-3.5 w-3.5 shrink-0" />
                       <span className="truncate">{action.label}</span>
+                      {action.detail ? (
+                        <span className="ml-auto truncate pl-3 text-[9px] normal-case tracking-normal opacity-60">
+                          {action.detail}
+                        </span>
+                      ) : null}
                     </button>
                   );
                 })}

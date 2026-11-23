@@ -196,6 +196,70 @@ export function TableCell({ className, ...props }: React.ComponentProps<"td">) {
 
 /* ---------------------------------------------------------------- dialog */
 
+function useDialogFocus(open: boolean, onClose: () => void) {
+  const panelRef = React.useRef<HTMLDivElement>(null);
+  const closeRef = React.useRef(onClose);
+
+  React.useEffect(() => {
+    closeRef.current = onClose;
+  }, [onClose]);
+
+  React.useEffect(() => {
+    if (!open) return;
+    const previous = document.activeElement as HTMLElement | null;
+    const panel = panelRef.current;
+    const focusable = () =>
+      panel
+        ? Array.from(
+            panel.querySelectorAll<HTMLElement>(
+              'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])',
+            ),
+          )
+        : [];
+
+    const first =
+      panel?.querySelector<HTMLElement>(
+        'input:not([type="hidden"]), textarea, select, button:not([aria-label="Close"])',
+      ) || panel;
+    first?.focus();
+
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        closeRef.current();
+        return;
+      }
+      if (event.key !== "Tab") return;
+      const items = focusable();
+      if (!items.length) {
+        event.preventDefault();
+        panel?.focus();
+        return;
+      }
+      const firstItem = items[0];
+      const lastItem = items[items.length - 1];
+      if (event.shiftKey && document.activeElement === firstItem) {
+        event.preventDefault();
+        lastItem.focus();
+      } else if (!event.shiftKey && document.activeElement === lastItem) {
+        event.preventDefault();
+        firstItem.focus();
+      }
+    };
+
+    document.addEventListener("keydown", onKey);
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.body.style.overflow = previousOverflow;
+      previous?.focus?.();
+    };
+  }, [open]);
+
+  return panelRef;
+}
+
 export function Dialog({
   open,
   onClose,
@@ -213,19 +277,9 @@ export function Dialog({
   footer?: React.ReactNode;
   className?: string;
 }) {
-  React.useEffect(() => {
-    if (!open) return;
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
-    };
-    document.addEventListener("keydown", onKey);
-    const previous = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.removeEventListener("keydown", onKey);
-      document.body.style.overflow = previous;
-    };
-  }, [open, onClose]);
+  const panelRef = useDialogFocus(open, onClose);
+  const titleId = React.useId();
+  const descriptionId = React.useId();
 
   if (!open) return null;
 
@@ -235,21 +289,25 @@ export function Dialog({
       onMouseDown={onClose}
     >
       <div
+        ref={panelRef}
         role="dialog"
         aria-modal="true"
+        aria-labelledby={title ? titleId : undefined}
+        aria-describedby={description ? descriptionId : undefined}
+        tabIndex={-1}
         className={cn(
-          "my-auto w-full max-w-xl border-2 border-foreground bg-card text-card-foreground shadow-2xl",
+          "my-auto w-full max-w-xl border-2 border-foreground bg-card text-card-foreground shadow-2xl focus:outline-none",
           className,
         )}
         onMouseDown={(event) => event.stopPropagation()}
       >
         <div className="flex items-start justify-between gap-4 border-b-2 border-foreground px-5 py-4">
           <div>
-            <h2 className="font-mono text-sm font-bold uppercase tracking-[0.08em]">
+            <h2 id={titleId} className="font-mono text-sm font-bold uppercase tracking-[0.08em]">
               {title}
             </h2>
             {description ? (
-              <p className="mt-1 text-xs text-muted-foreground">{description}</p>
+              <p id={descriptionId} className="mt-1 text-xs text-muted-foreground">{description}</p>
             ) : null}
           </div>
           <Button variant="ghost" size="icon" onClick={onClose} aria-label="Close">
@@ -285,37 +343,31 @@ export function Sheet({
   footer?: React.ReactNode;
   className?: string;
 }) {
-  React.useEffect(() => {
-    if (!open) return;
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
-    };
-    document.addEventListener("keydown", onKey);
-    const previous = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.removeEventListener("keydown", onKey);
-      document.body.style.overflow = previous;
-    };
-  }, [open, onClose]);
+  const panelRef = useDialogFocus(open, onClose);
+  const titleId = React.useId();
+  const descriptionId = React.useId();
 
   if (!open) return null;
 
   return createPortal(
     <div className="fixed inset-0 z-50 flex justify-end bg-black/50" onMouseDown={onClose}>
       <div
+        ref={panelRef}
         role="dialog"
         aria-modal="true"
+        aria-labelledby={title ? titleId : undefined}
+        aria-describedby={description ? descriptionId : undefined}
+        tabIndex={-1}
         className={cn(
-          "flex h-full w-full max-w-2xl flex-col border-l-2 border-foreground bg-card text-card-foreground shadow-2xl",
+          "flex h-full w-full max-w-2xl flex-col border-l-2 border-foreground bg-card text-card-foreground shadow-2xl focus:outline-none",
           className,
         )}
         onMouseDown={(event) => event.stopPropagation()}
       >
         <div className="flex items-start justify-between gap-4 border-b-2 border-foreground px-5 py-4">
           <div>
-            <h2 className="font-mono text-sm font-bold uppercase tracking-[0.08em]">{title}</h2>
-            {description ? <p className="mt-1 text-xs text-muted-foreground">{description}</p> : null}
+            <h2 id={titleId} className="font-mono text-sm font-bold uppercase tracking-[0.08em]">{title}</h2>
+            {description ? <p id={descriptionId} className="mt-1 text-xs text-muted-foreground">{description}</p> : null}
           </div>
           <Button variant="ghost" size="icon" onClick={onClose} aria-label="Close">
             <X />
@@ -347,13 +399,15 @@ export function Tabs({
   className?: string;
 }) {
   return (
-    <div className={cn("flex flex-wrap gap-1 border-b border-border", className)}>
+    <div role="tablist" className={cn("flex flex-wrap gap-1 border-b border-border", className)}>
       {tabs.map((tab) => {
         const active = tab.value === value;
         return (
           <button
             key={tab.value}
             type="button"
+            role="tab"
+            aria-selected={active}
             onClick={() => onChange(tab.value)}
             className={cn(
               "-mb-px flex items-center gap-2 border-b-2 px-3 py-2 font-mono text-[10px] uppercase tracking-[0.12em] transition-colors",

@@ -25,6 +25,7 @@ run: ui
 	CGO_ENABLED=0 go run -tags no_ui -ldflags "$(LDFLAGS)" ./cmd/box serve
 
 test:
+	@test -d internal/ui/dist || $(MAKE) ui
 	go test ./...
 
 tidy:
@@ -36,7 +37,7 @@ update-pocketone:
 
 clean:
 	rm -f $(BINARY) $(BINARY).exe
-	rm -rf .builds web/node_modules
+	rm -rf .builds internal/ui/dist web/node_modules
 
 # Create and push a semantic version tag for HEAD.
 #   make tag                  bump the patch version

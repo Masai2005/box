@@ -17,6 +17,7 @@ import {
 } from "@/components/ui";
 import { pb, errorMessage } from "@/lib/pb";
 import { filterRedacted } from "@/lib/utils";
+import { discardChanges, useUnsavedChanges } from "@/lib/useUnsavedChanges";
 
 function setNested(object: any, path: string, value: any) {
   const next = JSON.parse(JSON.stringify(object || {}));
@@ -40,13 +41,16 @@ export function SettingsApplicationPage() {
   const [busy, setBusy] = useState(false);
   const [advanced, setAdvanced] = useState("");
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [baseline, setBaseline] = useState("");
 
   async function load() {
     setLoading(true);
     try {
       const value = await pb.settings.getAll();
+      const nextAdvanced = JSON.stringify(filterRedacted(value), null, 2);
       setSettings(value);
-      setAdvanced(JSON.stringify(filterRedacted(value), null, 2));
+      setAdvanced(nextAdvanced);
+      setBaseline(JSON.stringify({ settings: value, advanced: nextAdvanced }));
     } catch (err) {
       toast.error(errorMessage(err));
     } finally {
@@ -57,6 +61,15 @@ export function SettingsApplicationPage() {
   useEffect(() => {
     load();
   }, []);
+
+  const dirty =
+    Boolean(settings && baseline) &&
+    baseline !== JSON.stringify({ settings, advanced });
+  useUnsavedChanges(dirty);
+
+  function reload() {
+    discardChanges(dirty, load);
+  }
 
   function update(path: string, value: any) {
     setSettings((current: any) => setNested(current, path, value));
@@ -77,8 +90,10 @@ export function SettingsApplicationPage() {
         }
       }
       const updated = await pb.settings.update(payload);
+      const nextAdvanced = JSON.stringify(filterRedacted(updated), null, 2);
       setSettings(updated);
-      setAdvanced(JSON.stringify(filterRedacted(updated), null, 2));
+      setAdvanced(nextAdvanced);
+      setBaseline(JSON.stringify({ settings: updated, advanced: nextAdvanced }));
       toast.success("Application settings saved.");
     } catch (err) {
       toast.error(errorMessage(err));
@@ -95,7 +110,7 @@ export function SettingsApplicationPage() {
         eyebrow="settings/application"
         actions={
           <>
-            <Button variant="outline" size="sm" onClick={load} disabled={loading || busy}>
+            <Button variant="outline" size="sm" onClick={reload} disabled={loading || busy}>
               <RefreshCw />
               Reload
             </Button>

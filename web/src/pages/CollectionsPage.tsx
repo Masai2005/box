@@ -1,13 +1,15 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import {
   ChevronLeft,
   ChevronRight,
   Code2,
+  Columns3,
   Database,
   Pencil,
   Plus,
   RefreshCw,
+  Save,
   Search,
   Settings2,
   Trash2,
@@ -22,6 +24,7 @@ import {
   Button,
   Card,
   CardContent,
+  Dialog,
   EmptyState,
   Input,
   Select,
@@ -33,14 +36,25 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui";
+import {
+  clampPerPage,
+  editableField,
+  parseColumns,
+  readViews,
+  serializeColumns,
+  writeViews,
+  type Density,
+  type SavedView,
+} from "@/lib/collectionViews";
 import { pb, errorMessage } from "@/lib/pb";
-import { displayValue, formatDate } from "@/lib/utils";
+import { cn, displayValue, formatDate } from "@/lib/utils";
 
 type Field = {
   name: string;
   type: string;
   hidden?: boolean;
   system?: boolean;
+  values?: string[];
 };
 
 type Collection = {
@@ -51,11 +65,23 @@ type Collection = {
   fields: Field[];
 };
 
+type CollectionsSearch = {
+  collection?: string;
+  record?: string;
+  filter?: string;
+  sort?: string;
+  page?: number;
+  perPage?: number;
+  columns?: string;
+  density?: Density;
+  view?: string;
+};
+
 const PER_PAGE = 30;
 const SYSTEM_COLUMNS = new Set(["id", "collectionId", "collectionName", "expand"]);
 
 export function CollectionsPage() {
-  const search = useSearch({ strict: false }) as { collection?: string; record?: string };
+  const search = useSearch({ strict: false }) as CollectionsSearch;
   const navigate = useNavigate();
 
   const [collections, setCollections] = useState<Collection[]>([]);
@@ -67,10 +93,17 @@ export function CollectionsPage() {
   const [total, setTotal] = useState(0);
   const [loadingRecords, setLoadingRecords] = useState(false);
   const [recordsError, setRecordsError] = useState("");
-  const [filter, setFilter] = useState("");
-  const [sort, setSort] = useState("-created");
-  const [page, setPage] = useState(1);
   const [refreshKey, setRefreshKey] = useState(0);
+
+  const filter = search.filter ?? "";
+  const sort = search.sort ?? "-created";
+  const page = Math.max(1, Number(search.page) || 1);
+  const perPage = clampPerPage(search.perPage, PER_PAGE);
+  const density: Density = search.density === "compact" ? "compact" : "comfortable";
+
+  const [savedViews, setSavedViews] = useState<SavedView[]>([]);
+  const [columnsOpen, setColumnsOpen] = useState(false);
+  const [columnDraft, setColumnDraft] = useState<string[]>([]);
 
   const [sheetOpen, setSheetOpen] = useState(false);
   const [editingRecord, setEditingRecord] = useState<Record<string, any> | null>(null);
@@ -101,15 +134,34 @@ export function CollectionsPage() {
   const visible = (collection: Collection) =>
     collection.name.toLowerCase().includes(sidebarFilter.toLowerCase());
 
-  const dataFields = useMemo(
+  const availableColumns = useMemo(
     () =>
       (selected?.fields || [])
         .filter((field) => !field.hidden && !SYSTEM_COLUMNS.has(field.name))
-        .slice(0, 5),
+        .map((field) => field.name),
     [selected],
   );
 
+  const columnNames = useMemo(
+    () => parseColumns(search.columns, availableColumns),
+    [search.columns, availableColumns],
+  );
+
+  const dataFields = useMemo(
+    () => (selected?.fields || []).filter((field) => columnNames.includes(field.name)),
+    [selected, columnNames],
+  );
+
+  const activeView = useMemo(
+    () => savedViews.find((view) => view.name === search.view),
+    [savedViews, search.view],
+  );
+
   const recordParam = search.record;
+
+  function updateSearch(patch: Partial<CollectionsSearch>, replace = true) {
+    navigate({ to: "/collections", search: { ...search, ...patch } as any, replace });
+  }
 
   useEffect(() => {
     if (!selected) return;
@@ -148,17 +200,11 @@ export function CollectionsPage() {
 
   function openRecord(record: Record<string, any> | null) {
     if (!selected) return;
-    navigate({
-      to: "/collections",
-      search: { collection: selected.name, record: record?.id || "new" } as any,
-    });
+    updateSearch({ record: record?.id || "new" }, false);
   }
 
   function closeRecord() {
-    navigate({
-      to: "/collections",
-      search: { collection: selected?.name, record: undefined } as any,
-    });
+    updateSearch({ record: undefined });
   }
 
   async function loadCollections() {
@@ -179,7 +225,11 @@ export function CollectionsPage() {
   }, []);
 
   useEffect(() => {
-    setPage(1);
+    if (!selected?.name) {
+      setSavedViews([]);
+      return;
+    }
+    setSavedViews(readViews(selected.name));
   }, [selected?.name]);
 
   useEffect(() => {
@@ -188,7 +238,7 @@ export function CollectionsPage() {
     setLoadingRecords(true);
     setRecordsError("");
     pb.collection(selected.name)
-      .getList(page, PER_PAGE, { sort, filter: filter.trim() || undefined })
+      .getList(page, perPage, { sort, filter: filter.trim() || undefined })
       .then((result) => {
         if (cancelled) return;
         setRecords(result.items);
@@ -203,7 +253,7 @@ export function CollectionsPage() {
     return () => {
       cancelled = true;
     };
-  }, [selected?.name, page, filter, sort, refreshKey]);
+  }, [selected?.name, page, perPage, filter, sort, refreshKey]);
 
   useEffect(() => {
     if (!selected) return;
@@ -225,7 +275,103 @@ export function CollectionsPage() {
   }, [selected?.name]);
 
   function selectCollection(collection: Collection) {
-    navigate({ to: "/collections", search: { collection: collection.name, record: undefined } as any });
+    navigate({ to: "/collections", search: { collection: collection.name } as any });
+  }
+
+  function applyView(name: string) {
+    if (!name) {
+      updateSearch({
+        view: undefined,
+        filter: "",
+        sort: "-created",
+        perPage: PER_PAGE,
+        columns: undefined,
+        density: "comfortable",
+        page: 1,
+      });
+      return;
+    }
+    const view = savedViews.find((item) => item.name === name);
+    if (!view) return;
+    updateSearch({
+      view: view.name,
+      filter: view.filter,
+      sort: view.sort,
+      perPage: view.perPage,
+      columns: serializeColumns(view.columns),
+      density: view.density,
+      page: 1,
+    });
+  }
+
+  function saveView() {
+    if (!selected) return;
+    const name = window.prompt("Name this view", activeView?.name || "");
+    if (!name?.trim()) return;
+    const view: SavedView = {
+      id:
+        typeof crypto !== "undefined" && "randomUUID" in crypto
+          ? crypto.randomUUID()
+          : String(Date.now()),
+      name: name.trim(),
+      filter,
+      sort,
+      perPage,
+      columns: columnNames,
+      density,
+    };
+    const next = [view, ...savedViews.filter((item) => item.name !== view.name)];
+    writeViews(selected.name, next);
+    setSavedViews(next);
+    updateSearch({ view: view.name, columns: serializeColumns(view.columns) });
+    toast.success(`Saved view "${view.name}".`);
+  }
+
+  function deleteView() {
+    if (!selected || !activeView) return;
+    if (!window.confirm(`Delete the saved view "${activeView.name}"?`)) return;
+    const next = savedViews.filter((view) => view.id !== activeView.id);
+    writeViews(selected.name, next);
+    setSavedViews(next);
+    updateSearch({ view: undefined });
+    toast.success("Saved view deleted.");
+  }
+
+  function openColumns() {
+    setColumnDraft(columnNames);
+    setColumnsOpen(true);
+  }
+
+  function toggleColumn(name: string) {
+    setColumnDraft((current) =>
+      current.includes(name) ? current.filter((item) => item !== name) : [...current, name],
+    );
+  }
+
+  function applyColumns() {
+    updateSearch({ columns: serializeColumns(columnDraft), view: undefined });
+    setColumnsOpen(false);
+  }
+
+  async function saveCell(record: Record<string, any>, field: Field, value: any) {
+    if (!selected) return;
+    const payload =
+      field.type === "bool"
+        ? Boolean(value)
+        : field.type === "number"
+          ? value === "" || value === null || value === undefined
+            ? 0
+            : Number(value)
+          : field.type === "date"
+            ? value
+              ? new Date(value).toISOString()
+              : ""
+            : value;
+    const updated = await pb.collection(selected.name).update(record.id, {
+      [field.name]: payload,
+    });
+    setRecords((current) => current.map((item) => (item.id === record.id ? updated : item)));
+    toast.success(`${field.name} updated.`);
   }
 
   async function deleteRecord(record: Record<string, any>) {
@@ -253,7 +399,8 @@ export function CollectionsPage() {
     }
   }
 
-  const pages = Math.max(1, Math.ceil(total / PER_PAGE));
+  const pages = Math.max(1, Math.ceil(total / perPage));
+  const compact = density === "compact";
 
   return (
     <>
@@ -294,6 +441,7 @@ export function CollectionsPage() {
                 <Input
                   className="pl-9"
                   placeholder="Search collections…"
+                  aria-label="Search collections"
                   value={sidebarFilter}
                   onChange={(event) => setSidebarFilter(event.target.value)}
                 />
@@ -369,25 +517,84 @@ export function CollectionsPage() {
                     <Input
                       className="pl-9"
                       placeholder='Filter, e.g. name ~ "post"'
+                      aria-label="Filter records"
                       value={filter}
-                      onChange={(event) => {
-                        setFilter(event.target.value);
-                        setPage(1);
-                      }}
+                      onChange={(event) =>
+                        updateSearch({ filter: event.target.value, page: 1, view: undefined })
+                      }
                     />
                   </div>
                   <Select
                     className="w-[170px]"
+                    aria-label="Sort records"
                     value={sort}
-                    onChange={(event) => {
-                      setSort(event.target.value);
-                      setPage(1);
-                    }}
+                    onChange={(event) =>
+                      updateSearch({ sort: event.target.value, page: 1, view: undefined })
+                    }
                   >
                     <option value="-created">Newest first</option>
                     <option value="created">Oldest first</option>
                     <option value="-updated">Recently updated</option>
                     <option value="updated">Least recently updated</option>
+                  </Select>
+                  <Select
+                    className="w-[160px]"
+                    aria-label="Saved views"
+                    value={activeView?.name || ""}
+                    onChange={(event) => applyView(event.target.value)}
+                  >
+                    <option value="">Custom view</option>
+                    {savedViews.map((view) => (
+                      <option key={view.id} value={view.name}>
+                        {view.name}
+                      </option>
+                    ))}
+                  </Select>
+                  <Button variant="outline" size="sm" onClick={saveView}>
+                    <Save />
+                    Save view
+                  </Button>
+                  {activeView ? (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={deleteView}
+                      aria-label="Delete saved view"
+                    >
+                      <Trash2 />
+                    </Button>
+                  ) : null}
+                  <Button variant="outline" size="sm" onClick={openColumns}>
+                    <Columns3 />
+                    Columns ({columnNames.length})
+                  </Button>
+                  <Select
+                    className="w-[145px]"
+                    aria-label="Row density"
+                    value={density}
+                    onChange={(event) =>
+                      updateSearch({
+                        density: event.target.value as Density,
+                        view: undefined,
+                      })
+                    }
+                  >
+                    <option value="comfortable">Comfortable</option>
+                    <option value="compact">Compact</option>
+                  </Select>
+                  <Select
+                    className="w-[125px]"
+                    aria-label="Records per page"
+                    value={String(perPage)}
+                    onChange={(event) =>
+                      updateSearch({ perPage: Number(event.target.value), page: 1, view: undefined })
+                    }
+                  >
+                    {[10, 30, 50, 100].map((value) => (
+                      <option key={value} value={value}>
+                        {value} / page
+                      </option>
+                    ))}
                   </Select>
                   <Button
                     variant="outline"
@@ -412,82 +619,177 @@ export function CollectionsPage() {
                       </div>
                     ) : null}
 
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>ID</TableHead>
-                          {dataFields.map((field) => (
-                            <TableHead key={field.name}>{field.name}</TableHead>
-                          ))}
-                          <TableHead>Updated</TableHead>
-                          <TableHead className="text-right">Actions</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {loadingRecords ? (
-                          Array.from({ length: 6 }).map((_, index) => (
-                            <TableRow key={index}>
-                              <TableCell colSpan={dataFields.length + 3}>
-                                <Skeleton className="h-5 w-full" />
-                              </TableCell>
-                            </TableRow>
-                          ))
-                        ) : records.length ? (
-                          records.map((record) => (
-                            <TableRow key={record.id}>
-                              <TableCell className="max-w-[120px] truncate font-mono text-[10px] text-muted-foreground">
-                                {record.id}
-                              </TableCell>
-                              {dataFields.map((field) => (
-                                <TableCell key={field.name} className="max-w-[220px] truncate">
-                                  <FieldValue value={record[field.name]} type={field.type} />
-                                </TableCell>
-                              ))}
-                              <TableCell className="whitespace-nowrap text-[10px] text-muted-foreground">
-                                {formatDate(record.updated)}
-                              </TableCell>
-                              <TableCell className="text-right">
-                                <div className="flex items-center justify-end gap-1">
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    onClick={() => openRecord(record)}
-                                    aria-label="Edit record"
-                                  >
-                                    <Pencil />
-                                  </Button>
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    onClick={() => deleteRecord(record)}
-                                    aria-label="Delete record"
-                                  >
-                                    <Trash2 />
-                                  </Button>
-                                </div>
-                              </TableCell>
-                            </TableRow>
-                          ))
-                        ) : (
+                    <div className="hidden md:block">
+                      <Table>
+                        <TableHeader>
                           <TableRow>
-                            <TableCell colSpan={dataFields.length + 3}>
-                              <EmptyState
-                                title="No records found"
-                                description="Create a record or change the filter."
-                                action={
-                                  <Button
-                                    onClick={() => openRecord(null)}
-                                  >
-                                    <Plus />
-                                    New record
-                                  </Button>
-                                }
-                              />
-                            </TableCell>
+                            <TableHead>ID</TableHead>
+                            {dataFields.map((field) => (
+                              <TableHead key={field.name}>{field.name}</TableHead>
+                            ))}
+                            <TableHead>Updated</TableHead>
+                            <TableHead className="text-right">Actions</TableHead>
                           </TableRow>
-                        )}
-                      </TableBody>
-                    </Table>
+                        </TableHeader>
+                        <TableBody>
+                          {loadingRecords ? (
+                            Array.from({ length: 6 }).map((_, index) => (
+                              <TableRow key={index}>
+                                <TableCell colSpan={dataFields.length + 3}>
+                                  <Skeleton className="h-5 w-full" />
+                                </TableCell>
+                              </TableRow>
+                            ))
+                          ) : records.length ? (
+                            records.map((record) => (
+                              <TableRow key={record.id}>
+                                <TableCell
+                                  className={cn(
+                                    "max-w-[120px] truncate font-mono text-[10px] text-muted-foreground",
+                                    compact ? "py-1.5" : "",
+                                  )}
+                                >
+                                  {record.id}
+                                </TableCell>
+                                {dataFields.map((field) => (
+                                  <TableCell
+                                    key={field.name}
+                                    className={cn("max-w-[220px] truncate", compact ? "py-1.5" : "")}
+                                  >
+                                    {editableField(field.type) ? (
+                                      <InlineCell
+                                        value={record[field.name]}
+                                        field={field}
+                                        onSave={(value) => saveCell(record, field, value)}
+                                      />
+                                    ) : (
+                                      <FieldValue value={record[field.name]} type={field.type} />
+                                    )}
+                                  </TableCell>
+                                ))}
+                                <TableCell
+                                  className={cn(
+                                    "whitespace-nowrap text-[10px] text-muted-foreground",
+                                    compact ? "py-1.5" : "",
+                                  )}
+                                >
+                                  {formatDate(record.updated)}
+                                </TableCell>
+                                <TableCell className={cn("text-right", compact ? "py-1.5" : "")}>
+                                  <div className="flex items-center justify-end gap-1">
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      onClick={() => openRecord(record)}
+                                      aria-label="Edit record"
+                                    >
+                                      <Pencil />
+                                    </Button>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      onClick={() => deleteRecord(record)}
+                                      aria-label="Delete record"
+                                    >
+                                      <Trash2 />
+                                    </Button>
+                                  </div>
+                                </TableCell>
+                              </TableRow>
+                            ))
+                          ) : (
+                            <TableRow>
+                              <TableCell colSpan={dataFields.length + 3}>
+                                <EmptyState
+                                  title="No records found"
+                                  description="Create a record or change the filter."
+                                  action={
+                                    <Button onClick={() => openRecord(null)}>
+                                      <Plus />
+                                      New record
+                                    </Button>
+                                  }
+                                />
+                              </TableCell>
+                            </TableRow>
+                          )}
+                        </TableBody>
+                      </Table>
+                    </div>
+
+                    <div className="divide-y divide-border md:hidden">
+                      {loadingRecords ? (
+                        Array.from({ length: 3 }).map((_, index) => (
+                          <div key={index} className="space-y-2 p-4">
+                            <Skeleton className="h-4 w-2/3" />
+                            <Skeleton className="h-4 w-full" />
+                          </div>
+                        ))
+                      ) : records.length ? (
+                        records.map((record) => (
+                          <article key={record.id} className="space-y-3 p-4">
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="min-w-0">
+                                <p className="truncate font-mono text-xs font-bold">
+                                  {mobileLabel(record, dataFields)}
+                                </p>
+                                <p className="mt-0.5 font-mono text-[9px] text-muted-foreground">
+                                  {record.id}
+                                </p>
+                              </div>
+                              <span className="shrink-0 font-mono text-[9px] text-muted-foreground">
+                                {formatDate(record.updated)}
+                              </span>
+                            </div>
+                            {dataFields.length ? (
+                              <dl className="grid grid-cols-2 gap-2">
+                                {dataFields.slice(0, 4).map((field) => (
+                                  <div key={field.name} className="min-w-0">
+                                    <dt className="font-mono text-[8px] uppercase tracking-[0.12em] text-muted-foreground">
+                                      {field.name}
+                                    </dt>
+                                    <dd className="mt-0.5 truncate text-xs">
+                                      <FieldValue value={record[field.name]} type={field.type} />
+                                    </dd>
+                                  </div>
+                                ))}
+                              </dl>
+                            ) : null}
+                            <div className="flex gap-2 border-t border-border pt-3">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="flex-1"
+                                onClick={() => openRecord(record)}
+                              >
+                                <Pencil />
+                                Edit
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => deleteRecord(record)}
+                                aria-label="Delete record"
+                              >
+                                <Trash2 />
+                                Delete
+                              </Button>
+                            </div>
+                          </article>
+                        ))
+                      ) : (
+                        <EmptyState
+                          title="No records found"
+                          description="Create a record or change the filter."
+                          action={
+                            <Button onClick={() => openRecord(null)}>
+                              <Plus />
+                              New record
+                            </Button>
+                          }
+                        />
+                      )}
+                    </div>
                   </CardContent>
                 </Card>
 
@@ -500,7 +802,7 @@ export function CollectionsPage() {
                       variant="outline"
                       size="sm"
                       disabled={page <= 1}
-                      onClick={() => setPage((value) => Math.max(1, value - 1))}
+                      onClick={() => updateSearch({ page: Math.max(1, page - 1) })}
                     >
                       <ChevronLeft />
                       Prev
@@ -512,7 +814,7 @@ export function CollectionsPage() {
                       variant="outline"
                       size="sm"
                       disabled={page >= pages}
-                      onClick={() => setPage((value) => Math.min(pages, value + 1))}
+                      onClick={() => updateSearch({ page: Math.min(pages, page + 1) })}
                     >
                       Next
                       <ChevronRight />
@@ -549,8 +851,68 @@ export function CollectionsPage() {
       />
 
       <ApiPreviewDialog open={apiOpen} onClose={() => setApiOpen(false)} collection={selected} />
+
+      <Dialog
+        open={columnsOpen}
+        onClose={() => setColumnsOpen(false)}
+        title="Columns"
+        description="Choose which fields appear in the records table."
+        footer={
+          <>
+            <Button variant="outline" onClick={() => setColumnsOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={applyColumns}>Apply columns</Button>
+          </>
+        }
+      >
+        <div className="mb-3 flex flex-wrap gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setColumnDraft(availableColumns)}
+          >
+            Select all
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => setColumnDraft([])}>
+            Clear all
+          </Button>
+        </div>
+        <div className="grid gap-2 sm:grid-cols-2">
+          {availableColumns.map((name) => {
+            const field = selected?.fields.find((item) => item.name === name);
+            return (
+              <label
+                key={name}
+                className="flex cursor-pointer items-center gap-2 border border-border px-3 py-2 font-mono text-[10px]"
+              >
+                <input
+                  type="checkbox"
+                  checked={columnDraft.includes(name)}
+                  onChange={() => toggleColumn(name)}
+                  className="h-4 w-4 accent-[hsl(var(--accent))]"
+                />
+                <span className="truncate">{name}</span>
+                <span className="ml-auto text-[9px] text-muted-foreground">{field?.type}</span>
+              </label>
+            );
+          })}
+          {!availableColumns.length ? (
+            <p className="text-xs text-muted-foreground">This collection has no data columns.</p>
+          ) : null}
+        </div>
+      </Dialog>
     </>
   );
+}
+
+function mobileLabel(record: Record<string, any>, fields: Field[]) {
+  for (const name of ["title", "name", "email", "slug", "label"]) {
+    const field = fields.find((item) => item.name === name);
+    if (field && record[name]) return String(record[name]);
+  }
+  const first = fields.find((field) => record[field.name]);
+  return first ? displayValue(record[first.name]) : record.id;
 }
 
 function CollectionGroup({
@@ -605,4 +967,163 @@ function FieldValue({ value, type }: { value: any; type: string }) {
     );
   }
   return <span className="text-xs">{displayValue(value)}</span>;
+}
+
+function initialCellValue(field: Field, value: any): string {
+  if (value === null || value === undefined) return "";
+  if (field.type === "date") {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return String(value).replace(" ", "T").slice(0, 16);
+    return date.toISOString().slice(0, 16);
+  }
+  return String(value);
+}
+
+function InlineCell({
+  value,
+  field,
+  onSave,
+}: {
+  value: any;
+  field: Field;
+  onSave: (value: any) => Promise<void>;
+}) {
+  const initial = initialCellValue(field, value);
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(initial);
+  const [saving, setSaving] = useState(false);
+  const skipBlur = useRef(false);
+
+  useEffect(() => {
+    if (!editing) setDraft(initialCellValue(field, value));
+  }, [editing, field, value]);
+
+  function begin() {
+    setDraft(initialCellValue(field, value));
+    skipBlur.current = false;
+    setEditing(true);
+  }
+
+  async function commit(next = draft) {
+    if (saving) return;
+    if (next === initial) {
+      setEditing(false);
+      return;
+    }
+    setSaving(true);
+    try {
+      await onSave(next);
+      setEditing(false);
+    } catch (err) {
+      toast.error(errorMessage(err));
+    } finally {
+      setSaving(false);
+      skipBlur.current = false;
+    }
+  }
+
+  function cancel() {
+    skipBlur.current = true;
+    setDraft(initial);
+    setEditing(false);
+  }
+
+  if (!editing) {
+    return (
+      <button
+        type="button"
+        onDoubleClick={begin}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" || event.key === "F2") {
+            event.preventDefault();
+            begin();
+          }
+        }}
+        title={`Double-click to edit ${field.name}`}
+        aria-label={`Edit ${field.name} inline`}
+        className="w-full truncate text-left focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent"
+      >
+        <FieldValue value={value} type={field.type} />
+      </button>
+    );
+  }
+
+  if (field.type === "select" || field.type === "bool") {
+    const options = field.type === "bool" ? ["true", "false"] : field.values || [];
+    return (
+      <Select
+        autoFocus
+        aria-label={`Edit ${field.name}`}
+        value={field.type === "bool" ? String(Boolean(value)) : draft}
+        disabled={saving}
+        onChange={(event) => {
+          setDraft(event.target.value);
+          void commit(event.target.value);
+        }}
+        onBlur={() => {
+          if (skipBlur.current) {
+            skipBlur.current = false;
+            return;
+          }
+          void commit();
+        }}
+        onKeyDown={(event) => {
+          if (event.key === "Escape") {
+            event.preventDefault();
+            cancel();
+          }
+        }}
+      >
+        {field.type === "bool" ? (
+          <>
+            <option value="true">true</option>
+            <option value="false">false</option>
+          </>
+        ) : (
+          options.map((option) => (
+            <option key={option} value={option}>
+              {option}
+            </option>
+          ))
+        )}
+      </Select>
+    );
+  }
+
+  return (
+    <Input
+      autoFocus
+      aria-label={`Edit ${field.name}`}
+      type={
+        field.type === "number"
+          ? "number"
+          : field.type === "date"
+            ? "datetime-local"
+            : field.type === "email"
+              ? "email"
+              : field.type === "url"
+                ? "url"
+                : "text"
+      }
+      value={draft}
+      disabled={saving}
+      onChange={(event) => setDraft(event.target.value)}
+      onBlur={() => {
+        if (skipBlur.current) {
+          skipBlur.current = false;
+          return;
+        }
+        void commit();
+      }}
+      onKeyDown={(event) => {
+        if (event.key === "Enter") {
+          event.preventDefault();
+          void commit();
+        } else if (event.key === "Escape") {
+          event.preventDefault();
+          cancel();
+        }
+      }}
+    />
+  );
 }

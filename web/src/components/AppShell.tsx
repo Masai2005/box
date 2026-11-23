@@ -26,6 +26,7 @@ import {
   X,
 } from "lucide-react";
 import { AppIcon } from "@/components/AppIcon";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { CommandPalette } from "@/components/CommandPalette";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { useAuth } from "@/components/AuthProvider";
@@ -158,6 +159,7 @@ function NavLink({
       <Link
         to={item.href}
         onClick={onNavigate}
+        aria-current={active ? "page" : undefined}
         className={cn(
           "flex items-center gap-3 py-2 font-mono text-[10px] uppercase tracking-[0.14em] transition-colors",
           collapsed ? "justify-center px-0" : "px-3",
@@ -502,6 +504,12 @@ export function AppShell() {
 
   return (
     <div className="flex h-screen w-full overflow-hidden bg-background text-foreground">
+      <a
+        href="#main-content"
+        className="sr-only z-[80] border-2 border-foreground bg-card px-3 py-2 font-mono text-[10px] uppercase tracking-[0.12em] focus:not-sr-only focus:fixed focus:left-3 focus:top-3"
+      >
+        Skip to content
+      </a>
       <div className="hidden lg:flex">
         <Sidebar
           pathname={pathname}
@@ -542,8 +550,10 @@ export function AppShell() {
           onToggle={toggleSidebar}
           onSearch={() => setPaletteOpen(true)}
         />
-        <main className="dot-grid-bg flex-1">
-          <Outlet />
+        <main id="main-content" className="dot-grid-bg flex-1">
+          <ErrorBoundary resetKey={pathname}>
+            <Outlet />
+          </ErrorBoundary>
         </main>
       </div>
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />

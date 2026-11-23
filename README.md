@@ -186,7 +186,8 @@ explorer** shows working requests for every endpoint, with copy-ready cURL.
 # Build the console into internal/ui/dist, then the binary
 make build
 
-# Run without rebuilding the console (uses the committed build)
+# Build the console once, then run without rebuilding it
+make ui
 go run -tags no_ui ./cmd/box serve
 
 # Console hot reload (Vite proxies /api to the Go process on :8090)
@@ -194,8 +195,9 @@ make dev-ui
 go run -tags no_ui ./cmd/box serve
 ```
 
-The console's production build is committed so `go build` works on a machine without Bun or Node. `CGO_ENABLED=0`
-uses the pure-Go SQLite driver, producing a single statically linked executable.
+The console's production build is generated into `internal/ui/dist` and embedded in the binary. `make build` builds
+it automatically; release archives include it. Run `make ui` before a plain `go build`. `CGO_ENABLED=0` uses the
+pure-Go SQLite driver, producing a single statically linked executable.
 
 ```bash
 make test     # Go tests
@@ -216,7 +218,7 @@ make release  # build release archives
 │   ├── commands/                info, upgrade and other commands
 │   ├── extensions/              vacuum and development mail
 │   └── ui/                      embedded console assets
-│       └── dist/                built console (committed)
+│       └── dist/                built console (generated, gitignored)
 ├── web/                         React + TanStack Router + Tailwind console
 │   ├── src/
 │   │   ├── components/

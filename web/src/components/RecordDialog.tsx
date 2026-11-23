@@ -3,6 +3,7 @@ import { File as FileIcon, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button, Input, Label, Select, Sheet, Textarea } from "@/components/ui";
 import { pb, errorMessage, type Json } from "@/lib/pb";
+import { discardChanges } from "@/lib/useUnsavedChanges";
 
 type Field = {
   id?: string;
@@ -81,6 +82,7 @@ export function RecordDialog({
   const [fileToken, setFileToken] = useState("");
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
+  const [baseline, setBaseline] = useState("");
 
   useEffect(() => {
     if (!open || !collection) return;
@@ -91,6 +93,7 @@ export function RecordDialog({
     setForm(next);
     setRemovedFiles({});
     setErrors({});
+    setBaseline(snapshotForm(next, {}));
     if (record && editableFields.some((field) => field.type === "file")) {
       pb.files
         .getToken()
@@ -100,6 +103,15 @@ export function RecordDialog({
       setFileToken("");
     }
   }, [open, collection, record, editableFields]);
+
+  const dirty =
+    open &&
+    baseline !== "" &&
+    baseline !== snapshotForm(form, removedFiles);
+
+  function close() {
+    discardChanges(dirty, onClose);
+  }
 
   if (!collection) return null;
 
@@ -210,12 +222,12 @@ export function RecordDialog({
   return (
     <Sheet
       open={open}
-      onClose={onClose}
+      onClose={close}
       title={`${isEdit ? "Edit" : "New"} ${collection.name} record`}
       description={isEdit ? record?.id : "Create a new record"}
       footer={
         <>
-          <Button variant="outline" onClick={onClose} disabled={busy}>
+          <Button variant="outline" onClick={close} disabled={busy}>
             Cancel
           </Button>
           <Button type="submit" form="record-form" disabled={busy}>
@@ -250,6 +262,18 @@ export function RecordDialog({
       </form>
     </Sheet>
   );
+}
+
+function snapshotForm(form: Record<string, any>, removedFiles: Record<string, string[]>) {
+  const values: Record<string, any> = {};
+  for (const [key, value] of Object.entries(form)) {
+    if (Array.isArray(value) && value.every((item) => item instanceof File)) {
+      values[key] = value.map((file: File) => `${file.name}:${file.size}:${file.lastModified}`);
+    } else {
+      values[key] = value;
+    }
+  }
+  return JSON.stringify({ values, removedFiles });
 }
 
 function appendValue(formData: FormData, field: Field, value: any) {

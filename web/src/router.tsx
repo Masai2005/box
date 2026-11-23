@@ -1,28 +1,66 @@
-import { Navigate, Outlet, createRootRoute, createRoute, createRouter } from "@tanstack/react-router";
+import {
+  Navigate,
+  Outlet,
+  createRootRoute,
+  createRoute,
+  createRouter,
+  lazyRouteComponent,
+} from "@tanstack/react-router";
 import { useAuth } from "@/components/AuthProvider";
 import { AppShell } from "@/components/AppShell";
 import { Spinner } from "@/components/ui";
-import { LoginPage } from "@/pages/LoginPage";
-import { OverviewPage } from "@/pages/OverviewPage";
-import { CollectionsPage } from "@/pages/CollectionsPage";
-import { LogsPage } from "@/pages/LogsPage";
-import { BulkMailPage } from "@/pages/BulkMailPage";
-import { SettingsApplicationPage } from "@/pages/SettingsApplicationPage";
-import { SettingsMailPage } from "@/pages/SettingsMailPage";
-import { SettingsStoragePage } from "@/pages/SettingsStoragePage";
-import { SettingsBackupsPage } from "@/pages/SettingsBackupsPage";
-import { SettingsCronsPage } from "@/pages/SettingsCronsPage";
-import { SettingsTokensPage } from "@/pages/SettingsTokensPage";
-import { SettingsSqlPage } from "@/pages/SettingsSqlPage";
-import { SettingsExportPage } from "@/pages/SettingsExportPage";
-import { SettingsImportPage } from "@/pages/SettingsImportPage";
-import { SchemaPage } from "@/pages/SchemaPage";
-import { ApiExplorerPage } from "@/pages/ApiExplorerPage";
-import { RealtimePage } from "@/pages/RealtimePage";
-import { SecurityPage } from "@/pages/SecurityPage";
-import { RuntimePage } from "@/pages/RuntimePage";
-import { MigrationsPage } from "@/pages/MigrationsPage";
 import { NotFoundPage } from "@/pages/NotFoundPage";
+
+const LoginPage = lazyRouteComponent(() => import("@/pages/LoginPage"), "LoginPage");
+const OverviewPage = lazyRouteComponent(() => import("@/pages/OverviewPage"), "OverviewPage");
+const CollectionsPage = lazyRouteComponent(() => import("@/pages/CollectionsPage"), "CollectionsPage");
+const LogsPage = lazyRouteComponent(() => import("@/pages/LogsPage"), "LogsPage");
+const BulkMailPage = lazyRouteComponent(() => import("@/pages/BulkMailPage"), "BulkMailPage");
+const SettingsApplicationPage = lazyRouteComponent(
+  () => import("@/pages/SettingsApplicationPage"),
+  "SettingsApplicationPage",
+);
+const SettingsMailPage = lazyRouteComponent(
+  () => import("@/pages/SettingsMailPage"),
+  "SettingsMailPage",
+);
+const SettingsStoragePage = lazyRouteComponent(
+  () => import("@/pages/SettingsStoragePage"),
+  "SettingsStoragePage",
+);
+const SettingsBackupsPage = lazyRouteComponent(
+  () => import("@/pages/SettingsBackupsPage"),
+  "SettingsBackupsPage",
+);
+const SettingsCronsPage = lazyRouteComponent(
+  () => import("@/pages/SettingsCronsPage"),
+  "SettingsCronsPage",
+);
+const SettingsTokensPage = lazyRouteComponent(
+  () => import("@/pages/SettingsTokensPage"),
+  "SettingsTokensPage",
+);
+const SettingsSqlPage = lazyRouteComponent(
+  () => import("@/pages/SettingsSqlPage"),
+  "SettingsSqlPage",
+);
+const SettingsExportPage = lazyRouteComponent(
+  () => import("@/pages/SettingsExportPage"),
+  "SettingsExportPage",
+);
+const SettingsImportPage = lazyRouteComponent(
+  () => import("@/pages/SettingsImportPage"),
+  "SettingsImportPage",
+);
+const SchemaPage = lazyRouteComponent(() => import("@/pages/SchemaPage"), "SchemaPage");
+const ApiExplorerPage = lazyRouteComponent(
+  () => import("@/pages/ApiExplorerPage"),
+  "ApiExplorerPage",
+);
+const RealtimePage = lazyRouteComponent(() => import("@/pages/RealtimePage"), "RealtimePage");
+const SecurityPage = lazyRouteComponent(() => import("@/pages/SecurityPage"), "SecurityPage");
+const RuntimePage = lazyRouteComponent(() => import("@/pages/RuntimePage"), "RuntimePage");
+const MigrationsPage = lazyRouteComponent(() => import("@/pages/MigrationsPage"), "MigrationsPage");
 
 function Loading() {
   return (
@@ -62,9 +100,30 @@ const collectionsRoute = createRoute({
   getParentRoute: () => authedRoute,
   path: "/collections",
   validateSearch: (search: Record<string, unknown>) => {
-    const result: { collection?: string; record?: string } = {};
+    const result: {
+      collection?: string;
+      record?: string;
+      filter?: string;
+      sort?: string;
+      page?: number;
+      perPage?: number;
+      columns?: string;
+      density?: "comfortable" | "compact";
+      view?: string;
+    } = {};
     if (typeof search.collection === "string") result.collection = search.collection;
     if (typeof search.record === "string") result.record = search.record;
+    if (typeof search.filter === "string") result.filter = search.filter;
+    if (typeof search.sort === "string") result.sort = search.sort;
+    if (typeof search.columns === "string") result.columns = search.columns;
+    if (search.density === "compact" || search.density === "comfortable") {
+      result.density = search.density;
+    }
+    if (typeof search.view === "string") result.view = search.view;
+    const page = Number(search.page);
+    if (Number.isFinite(page) && page > 0) result.page = Math.floor(page);
+    const perPage = Number(search.perPage);
+    if (Number.isFinite(perPage) && perPage > 0) result.perPage = Math.floor(perPage);
     return result;
   },
   component: CollectionsPage,

@@ -17,6 +17,7 @@ import {
 } from "@/components/ui";
 import { pb, errorMessage } from "@/lib/pb";
 import { filterRedacted } from "@/lib/utils";
+import { discardChanges, useUnsavedChanges } from "@/lib/useUnsavedChanges";
 
 function get(object: any, path: string) {
   return path.split(".").reduce((value, key) => value?.[key], object);
@@ -41,6 +42,7 @@ export function SettingsMailPage() {
   const [authCollections, setAuthCollections] = useState<any[]>([]);
   const [testTo, setTestTo] = useState("");
   const [testCollection, setTestCollection] = useState("");
+  const [baseline, setBaseline] = useState("");
 
   async function load() {
     setLoading(true);
@@ -50,6 +52,7 @@ export function SettingsMailPage() {
         pb.collections.getFullList({ filter: 'type = "auth"', sort: "name" }),
       ]);
       setSettings(value);
+      setBaseline(JSON.stringify(value));
       setAuthCollections(collections);
       setTestCollection((current) => current || collections[0]?.name || "");
     } catch (err) {
@@ -63,6 +66,13 @@ export function SettingsMailPage() {
     load();
   }, []);
 
+  const dirty = Boolean(settings && baseline) && baseline !== JSON.stringify(settings);
+  useUnsavedChanges(dirty);
+
+  function reload() {
+    discardChanges(dirty, load);
+  }
+
   function update(path: string, value: any) {
     setSettings((current: any) => set(current, path, value));
   }
@@ -73,6 +83,7 @@ export function SettingsMailPage() {
     try {
       const updated = await pb.settings.update(filterRedacted(settings));
       setSettings(updated);
+      setBaseline(JSON.stringify(updated));
       toast.success("Mail settings saved.");
     } catch (err) {
       toast.error(errorMessage(err));
@@ -105,7 +116,7 @@ export function SettingsMailPage() {
         eyebrow="settings/mail"
         actions={
           <>
-            <Button variant="outline" size="sm" onClick={load} disabled={loading || busy}>
+            <Button variant="outline" size="sm" onClick={reload} disabled={loading || busy}>
               <RefreshCw />
               Reload
             </Button>

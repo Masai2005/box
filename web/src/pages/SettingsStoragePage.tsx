@@ -25,6 +25,7 @@ import {
 } from "@/components/ui";
 import { pb, errorMessage } from "@/lib/pb";
 import { filterRedacted } from "@/lib/utils";
+import { discardChanges, useUnsavedChanges } from "@/lib/useUnsavedChanges";
 
 function get(object: any, path: string) {
   return path.split(".").reduce((value, key) => value?.[key], object);
@@ -51,6 +52,7 @@ export function SettingsStoragePage() {
   const [records, setRecords] = useState<any[]>([]);
   const [recordsLoading, setRecordsLoading] = useState(false);
   const [fileToken, setFileToken] = useState("");
+  const [baseline, setBaseline] = useState("");
 
   async function load() {
     setLoading(true);
@@ -60,6 +62,7 @@ export function SettingsStoragePage() {
         pb.collections.getFullList({ sort: "name" }),
       ]);
       setSettings(settingsValue);
+      setBaseline(JSON.stringify(settingsValue));
       const withFiles = (collectionList as any[]).filter((collection) =>
         (collection.fields || []).some((field: any) => field.type === "file"),
       );
@@ -76,6 +79,13 @@ export function SettingsStoragePage() {
   useEffect(() => {
     load();
   }, []);
+
+  const dirty = Boolean(settings && baseline) && baseline !== JSON.stringify(settings);
+  useUnsavedChanges(dirty);
+
+  function reload() {
+    discardChanges(dirty, load);
+  }
 
   useEffect(() => {
     if (!selectedCollection) {
@@ -122,6 +132,7 @@ export function SettingsStoragePage() {
     try {
       const updated = await pb.settings.update(filterRedacted(settings));
       setSettings(updated);
+      setBaseline(JSON.stringify(updated));
       toast.success("Storage settings saved.");
     } catch (err) {
       toast.error(errorMessage(err));
@@ -140,7 +151,7 @@ export function SettingsStoragePage() {
         eyebrow="settings/storage"
         actions={
           <>
-            <Button variant="outline" size="sm" onClick={load} disabled={loading || busy}>
+            <Button variant="outline" size="sm" onClick={reload} disabled={loading || busy}>
               <RefreshCw />
               Reload
             </Button>
