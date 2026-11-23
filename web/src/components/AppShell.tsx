@@ -16,12 +16,17 @@ import {
   Mail,
   Menu,
   PanelLeft,
+  Radio,
+  Search,
   ServerCog,
+  ShieldCheck,
+  Workflow,
   Settings,
   Terminal,
   X,
 } from "lucide-react";
 import { AppIcon } from "@/components/AppIcon";
+import { CommandPalette } from "@/components/CommandPalette";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { useAuth } from "@/components/AuthProvider";
 import { Button } from "@/components/ui";
@@ -36,6 +41,14 @@ const primary: NavItem[] = [
   { href: "/bulkmail", label: "Bulk mail", icon: Mail },
 ];
 
+const developer: NavItem[] = [
+  { href: "/schema", label: "Schema", icon: Workflow },
+  { href: "/api-explorer", label: "API explorer", icon: Braces },
+  { href: "/realtime", label: "Realtime", icon: Radio },
+  { href: "/security", label: "Security", icon: ShieldCheck },
+  { href: "/runtime", label: "Runtime", icon: ServerCog },
+];
+
 const settings: NavItem[] = [
   { href: "/settings", label: "Application", icon: Settings, exact: true },
   { href: "/settings/mail", label: "Mail", icon: Mail },
@@ -46,6 +59,7 @@ const settings: NavItem[] = [
   { href: "/settings/sql", label: "SQL console", icon: Terminal },
   { href: "/settings/export", label: "Export", icon: FileDown },
   { href: "/settings/import", label: "Import", icon: FileUp },
+  { href: "/migrations", label: "Migrations", icon: Workflow },
 ];
 
 // shadcn's sidebar cookie name, so the state feels like cloud-web.
@@ -239,6 +253,38 @@ function Sidebar({
 
         {collapsed ? (
           <div className="mx-1 mt-3 space-y-0.5 border-t border-border pt-3">
+            {developer.map((item) => (
+              <NavLink
+                key={item.href}
+                item={item}
+                pathname={pathname}
+                onNavigate={onNavigate}
+                collapsed
+              />
+            ))}
+          </div>
+        ) : (
+          <details open className="mt-4">
+            <summary className="flex cursor-pointer list-none items-center gap-2 px-3 py-2 font-mono text-[9px] uppercase tracking-[0.16em] text-muted-foreground [&::-webkit-details-marker]:hidden">
+              <Workflow className="h-3.5 w-3.5" />
+              Developer
+              <ChevronDown className="ml-auto h-3 w-3" />
+            </summary>
+            <div className="mt-1 space-y-0.5">
+              {developer.map((item) => (
+                <NavLink
+                  key={item.href}
+                  item={item}
+                  pathname={pathname}
+                  onNavigate={onNavigate}
+                />
+              ))}
+            </div>
+          </details>
+        )}
+
+        {collapsed ? (
+          <div className="mx-1 mt-3 space-y-0.5 border-t border-border pt-3">
             {settings.map((item) => (
               <NavLink
                 key={item.href}
@@ -343,10 +389,12 @@ function Topbar({
   pathname,
   onMenu,
   onToggle,
+  onSearch,
 }: {
   pathname: string;
   onMenu: () => void;
   onToggle: () => void;
+  onSearch: () => void;
 }) {
   const crumbs = pathname.split("/").filter(Boolean);
   return (
@@ -393,6 +441,27 @@ function Topbar({
         <span className="h-1.5 w-1.5 animate-blink bg-accent" />
       </div>
       <div className="flex items-center gap-2">
+        <Button
+          variant="outline"
+          size="sm"
+          className="hidden gap-2 text-muted-foreground sm:flex"
+          onClick={onSearch}
+        >
+          <Search />
+          Search
+          <kbd className="ml-2 border border-border px-1.5 py-0.5 font-mono text-[8px]">
+            ⌘K
+          </kbd>
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-7 w-7 sm:hidden"
+          onClick={onSearch}
+          aria-label="Search"
+        >
+          <Search className="h-3.5 w-3.5" />
+        </Button>
         <ThemeToggle />
       </div>
     </header>
@@ -403,6 +472,7 @@ export function AppShell() {
   const { superuser, logout } = useAuth();
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [paletteOpen, setPaletteOpen] = useState(false);
   const [open, setOpen] = useState(readSidebarOpen);
   const email = String(superuser?.email || "");
   const collapsed = !open;
@@ -420,6 +490,10 @@ export function AppShell() {
       if (event.key.toLowerCase() === "b" && (event.metaKey || event.ctrlKey)) {
         event.preventDefault();
         toggleSidebar();
+      }
+      if (event.key.toLowerCase() === "k" && (event.metaKey || event.ctrlKey)) {
+        event.preventDefault();
+        setPaletteOpen((current) => !current);
       }
     };
     window.addEventListener("keydown", onKeyDown);
@@ -466,11 +540,13 @@ export function AppShell() {
           pathname={pathname}
           onMenu={() => setMobileOpen(true)}
           onToggle={toggleSidebar}
+          onSearch={() => setPaletteOpen(true)}
         />
         <main className="dot-grid-bg flex-1">
           <Outlet />
         </main>
       </div>
+      <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
     </div>
   );
 }

@@ -55,7 +55,7 @@ const PER_PAGE = 30;
 const SYSTEM_COLUMNS = new Set(["id", "collectionId", "collectionName", "expand"]);
 
 export function CollectionsPage() {
-  const search = useSearch({ strict: false }) as { collection?: string };
+  const search = useSearch({ strict: false }) as { collection?: string; record?: string };
   const navigate = useNavigate();
 
   const [collections, setCollections] = useState<Collection[]>([]);
@@ -72,10 +72,8 @@ export function CollectionsPage() {
   const [page, setPage] = useState(1);
   const [refreshKey, setRefreshKey] = useState(0);
 
-  const [recordDialog, setRecordDialog] = useState<{ open: boolean; record: Record<string, any> | null }>({
-    open: false,
-    record: null,
-  });
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const [editingRecord, setEditingRecord] = useState<Record<string, any> | null>(null);
   const [collectionDialog, setCollectionDialog] = useState<{
     open: boolean;
     collection: Collection | null;
@@ -110,6 +108,58 @@ export function CollectionsPage() {
         .slice(0, 5),
     [selected],
   );
+
+  const recordParam = search.record;
+
+  useEffect(() => {
+    if (!selected) return;
+    if (!recordParam) {
+      setSheetOpen(false);
+      setEditingRecord(null);
+      return;
+    }
+    if (recordParam === "new") {
+      setEditingRecord(null);
+      setSheetOpen(true);
+      return;
+    }
+    const found = records.find((item) => item.id === recordParam);
+    if (found) {
+      setEditingRecord(found);
+      setSheetOpen(true);
+      return;
+    }
+    let cancelled = false;
+    pb.collection(selected.name)
+      .getOne(recordParam)
+      .then((record) => {
+        if (!cancelled) {
+          setEditingRecord(record);
+          setSheetOpen(true);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setSheetOpen(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [recordParam, selected?.name, records]);
+
+  function openRecord(record: Record<string, any> | null) {
+    if (!selected) return;
+    navigate({
+      to: "/collections",
+      search: { collection: selected.name, record: record?.id || "new" } as any,
+    });
+  }
+
+  function closeRecord() {
+    navigate({
+      to: "/collections",
+      search: { collection: selected?.name, record: undefined } as any,
+    });
+  }
 
   async function loadCollections() {
     setLoadingCollections(true);
@@ -175,7 +225,7 @@ export function CollectionsPage() {
   }, [selected?.name]);
 
   function selectCollection(collection: Collection) {
-    navigate({ to: "/collections", search: { collection: collection.name } as any });
+    navigate({ to: "/collections", search: { collection: collection.name, record: undefined } as any });
   }
 
   async function deleteRecord(record: Record<string, any>) {
@@ -226,7 +276,7 @@ export function CollectionsPage() {
                 <Settings2 />
                 Settings
               </Button>
-              <Button size="sm" onClick={() => setRecordDialog({ open: true, record: null })}>
+              <Button size="sm" onClick={() => openRecord(null)}>
                 <Plus />
                 New record
               </Button>
@@ -401,7 +451,7 @@ export function CollectionsPage() {
                                   <Button
                                     variant="ghost"
                                     size="icon"
-                                    onClick={() => setRecordDialog({ open: true, record })}
+                                    onClick={() => openRecord(record)}
                                     aria-label="Edit record"
                                   >
                                     <Pencil />
@@ -426,7 +476,7 @@ export function CollectionsPage() {
                                 description="Create a record or change the filter."
                                 action={
                                   <Button
-                                    onClick={() => setRecordDialog({ open: true, record: null })}
+                                    onClick={() => openRecord(null)}
                                   >
                                     <Plus />
                                     New record
@@ -476,11 +526,15 @@ export function CollectionsPage() {
       </PageBody>
 
       <RecordDialog
-        open={recordDialog.open}
-        onClose={() => setRecordDialog({ open: false, record: null })}
+        open={sheetOpen}
+        onClose={closeRecord}
         collection={selected}
-        record={recordDialog.record}
-        onSaved={() => setRefreshKey((value) => value + 1)}
+        record={editingRecord}
+        collections={collections}
+        onSaved={() => {
+          setRefreshKey((value) => value + 1);
+          closeRecord();
+        }}
       />
 
       <CollectionDialog

@@ -268,6 +268,71 @@ export function Dialog({
   );
 }
 
+export function Sheet({
+  open,
+  onClose,
+  title,
+  description,
+  children,
+  footer,
+  className,
+}: {
+  open: boolean;
+  onClose: () => void;
+  title?: React.ReactNode;
+  description?: React.ReactNode;
+  children?: React.ReactNode;
+  footer?: React.ReactNode;
+  className?: string;
+}) {
+  React.useEffect(() => {
+    if (!open) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", onKey);
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.body.style.overflow = previous;
+    };
+  }, [open, onClose]);
+
+  if (!open) return null;
+
+  return createPortal(
+    <div className="fixed inset-0 z-50 flex justify-end bg-black/50" onMouseDown={onClose}>
+      <div
+        role="dialog"
+        aria-modal="true"
+        className={cn(
+          "flex h-full w-full max-w-2xl flex-col border-l-2 border-foreground bg-card text-card-foreground shadow-2xl",
+          className,
+        )}
+        onMouseDown={(event) => event.stopPropagation()}
+      >
+        <div className="flex items-start justify-between gap-4 border-b-2 border-foreground px-5 py-4">
+          <div>
+            <h2 className="font-mono text-sm font-bold uppercase tracking-[0.08em]">{title}</h2>
+            {description ? <p className="mt-1 text-xs text-muted-foreground">{description}</p> : null}
+          </div>
+          <Button variant="ghost" size="icon" onClick={onClose} aria-label="Close">
+            <X />
+          </Button>
+        </div>
+        <div className="flex-1 overflow-y-auto p-5 scrollbar-thin">{children}</div>
+        {footer ? (
+          <div className="flex items-center justify-end gap-2 border-t border-border px-5 py-3">
+            {footer}
+          </div>
+        ) : null}
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
 /* ---------------------------------------------------------------- tabs */
 
 export function Tabs({

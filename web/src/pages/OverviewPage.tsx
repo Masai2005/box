@@ -1,10 +1,12 @@
 import { useEffect, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import {
+  AlertTriangle,
   Archive,
   ArrowUpRight,
   BarChart3,
   Database,
+  HardDrive,
   Key,
   Mail,
   RefreshCw,
@@ -14,7 +16,7 @@ import {
 import { PageBody, PageHeader } from "@/components/PageHeader";
 import { Badge, Button, Card, CardContent, CardHeader, CardTitle, EmptyState, Skeleton } from "@/components/ui";
 import { pb, errorMessage } from "@/lib/pb";
-import { formatDate } from "@/lib/utils";
+import { formatBytes, formatDate } from "@/lib/utils";
 
 type Collection = { id: string; name: string; type: string; system?: boolean };
 type Log = { id: string; level: number; message: string; created: string };
@@ -37,6 +39,8 @@ export function OverviewPage() {
   const [backups, setBackups] = useState<Backup[]>([]);
   const [superusers, setSuperusers] = useState(0);
   const [crons, setCrons] = useState(0);
+  const [dbSize, setDbSize] = useState(0);
+  const [errorsCount, setErrorsCount] = useState(0);
 
   async function load() {
     setLoading(true);
@@ -47,15 +51,31 @@ export function OverviewPage() {
       const match = /^Ekilie Box\s+(.+)$/i.exec(poweredBy);
       setVersion(match ? match[1] : "");
 
-      const [settingsResult, collectionsResult, logsResult, backupsResult, superusersResult, cronsResult] =
-        await Promise.allSettled([
-          pb.settings.getAll(),
-          pb.collections.getFullList({ sort: "name" }),
-          pb.logs.getList(1, 6, { sort: "-created" }),
-          pb.backups.getFullList(),
-          pb.collection("_superusers").getList(1, 1),
-          pb.crons.getFullList(),
-        ]);
+      const [
+        settingsResult,
+        collectionsResult,
+        logsResult,
+        backupsResult,
+        superusersResult,
+        cronsResult,
+        sqlResult,
+        errorsResult,
+      ] = await Promise.allSettled([
+        pb.settings.getAll(),
+        pb.collections.getFullList({ sort: "name" }),
+        pb.logs.getList(1, 6, { sort: "-created" }),
+        pb.backups.getFullList(),
+        pb.collection("_superusers").getList(1, 1),
+        pb.crons.getFullList(),
+        pb.send("/api/sql", {
+          method: "POST",
+          body: {
+            query:
+              "SELECT (SELECT page_count FROM pragma_page_count()) * (SELECT page_size FROM pragma_page_size()) AS size",
+          },
+        }),
+        pb.logs.getList(1, 1, { filter: "level >= 4" }),
+      ]);
 
       if (settingsResult.status === "fulfilled") setSettings(settingsResult.value);
       if (collectionsResult.status === "fulfilled") setCollections(collectionsResult.value as Collection[]);
@@ -63,6 +83,10 @@ export function OverviewPage() {
       if (backupsResult.status === "fulfilled") setBackups(backupsResult.value as Backup[]);
       if (superusersResult.status === "fulfilled") setSuperusers(superusersResult.value.totalItems);
       if (cronsResult.status === "fulfilled") setCrons(cronsResult.value.length);
+      if (sqlResult.status === "fulfilled") {
+        setDbSize(Number((sqlResult.value as any)?.rows?.[0]?.[0]) || 0);
+      }
+      if (errorsResult.status === "fulfilled") setErrorsCount(errorsResult.value.totalItems);
     } catch (err) {
       setError(errorMessage(err));
     } finally {
@@ -105,9 +129,9 @@ export function OverviewPage() {
           </div>
         ) : null}
 
-        <section className="grid gap-px border border-border bg-border sm:grid-cols-2 xl:grid-cols-4">
+        <section className="grid gap-px border border-border bg-border sm:grid-cols-3 xl:grid-cols-6">
           {loading ? (
-            Array.from({ length: 4 }).map((_, index) => (
+            Array.from({ length: 6 }).map((_, index) => (
               <div key={index} className="bg-background p-5">
                 <Skeleton className="mb-3 h-2.5 w-20" />
                 <Skeleton className="h-7 w-16" />
@@ -117,8 +141,10 @@ export function OverviewPage() {
             <>
               <Kpi label="Collections" value={String(collections.length)} icon={Database} />
               <Kpi label="Superusers" value={String(superusers)} icon={Users} />
+              <Kpi label="Database" value={formatBytes(dbSize)} icon={HardDrive} />
               <Kpi label="Backups" value={String(backups.length)} icon={Archive} />
               <Kpi label="Cron jobs" value={String(crons)} icon={Terminal} />
+              <Kpi label="Errors" value={String(errorsCount)} icon={AlertTriangle} />
             </>
           )}
         </section>

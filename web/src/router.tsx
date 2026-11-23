@@ -16,6 +16,12 @@ import { SettingsTokensPage } from "@/pages/SettingsTokensPage";
 import { SettingsSqlPage } from "@/pages/SettingsSqlPage";
 import { SettingsExportPage } from "@/pages/SettingsExportPage";
 import { SettingsImportPage } from "@/pages/SettingsImportPage";
+import { SchemaPage } from "@/pages/SchemaPage";
+import { ApiExplorerPage } from "@/pages/ApiExplorerPage";
+import { RealtimePage } from "@/pages/RealtimePage";
+import { SecurityPage } from "@/pages/SecurityPage";
+import { RuntimePage } from "@/pages/RuntimePage";
+import { MigrationsPage } from "@/pages/MigrationsPage";
 import { NotFoundPage } from "@/pages/NotFoundPage";
 
 function Loading() {
@@ -55,9 +61,12 @@ const overviewRoute = createRoute({ getParentRoute: () => authedRoute, path: "/"
 const collectionsRoute = createRoute({
   getParentRoute: () => authedRoute,
   path: "/collections",
-  validateSearch: (search: Record<string, unknown>) => ({
-    collection: typeof search.collection === "string" ? search.collection : undefined,
-  }),
+  validateSearch: (search: Record<string, unknown>) => {
+    const result: { collection?: string; record?: string } = {};
+    if (typeof search.collection === "string") result.collection = search.collection;
+    if (typeof search.record === "string") result.record = search.record;
+    return result;
+  },
   component: CollectionsPage,
 });
 const logsRoute = createRoute({ getParentRoute: () => authedRoute, path: "/logs", component: LogsPage });
@@ -111,6 +120,12 @@ const settingsImportRoute = createRoute({
   path: "/settings/import",
   component: SettingsImportPage,
 });
+const schemaRoute = createRoute({ getParentRoute: () => authedRoute, path: "/schema", component: SchemaPage });
+const apiExplorerRoute = createRoute({ getParentRoute: () => authedRoute, path: "/api-explorer", component: ApiExplorerPage });
+const realtimeRoute = createRoute({ getParentRoute: () => authedRoute, path: "/realtime", component: RealtimePage });
+const securityRoute = createRoute({ getParentRoute: () => authedRoute, path: "/security", component: SecurityPage });
+const runtimeRoute = createRoute({ getParentRoute: () => authedRoute, path: "/runtime", component: RuntimePage });
+const migrationsRoute = createRoute({ getParentRoute: () => authedRoute, path: "/migrations", component: MigrationsPage });
 
 const routeTree = rootRoute.addChildren([
   loginRoute,
@@ -128,6 +143,12 @@ const routeTree = rootRoute.addChildren([
     settingsSqlRoute,
     settingsExportRoute,
     settingsImportRoute,
+    schemaRoute,
+    apiExplorerRoute,
+    realtimeRoute,
+    securityRoute,
+    runtimeRoute,
+    migrationsRoute,
   ]),
 ]);
 

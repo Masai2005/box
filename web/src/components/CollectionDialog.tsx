@@ -1,7 +1,7 @@
-import { useEffect, useState } from "react";
-import { Plus, Trash2 } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { AlertTriangle, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
-import { Button, Dialog, Input, Label, Select } from "@/components/ui";
+import { Button, Dialog, Input, Label, Select, Tabs, Textarea } from "@/components/ui";
 import { pb, errorMessage, type Json } from "@/lib/pb";
 
 type Field = {
@@ -18,16 +18,27 @@ type Field = {
   options?: Json;
 };
 
+type Rule = { mode: "locked" | "public" | "custom"; expr: string };
+
 type Collection = {
   id: string;
   name: string;
   type: string;
+  system?: boolean;
   fields: Field[];
   listRule?: string | null;
   viewRule?: string | null;
   createRule?: string | null;
   updateRule?: string | null;
   deleteRule?: string | null;
+  authRule?: string | null;
+  manageRule?: string | null;
+  passwordAuth?: { enabled?: boolean };
+  otp?: { enabled?: boolean };
+  mfa?: { enabled?: boolean };
+  oauth2?: { enabled?: boolean; providers?: any[] };
+  indexes?: string[];
+  viewQuery?: string;
 };
 
 const SYSTEM_FIELDS = new Set(["id", "created", "updated"]);
@@ -55,6 +66,18 @@ const RULES = [
   ["deleteRule", "Delete rule"],
 ] as const;
 
+function toRule(value: string | null | undefined): Rule {
+  if (value === null || value === undefined) return { mode: "locked", expr: "" };
+  if (value === "") return { mode: "public", expr: "" };
+  return { mode: "custom", expr: value };
+}
+
+function fromRule(rule: Rule): string | null {
+  if (rule.mode === "locked") return null;
+  if (rule.mode === "public") return "";
+  return rule.expr.trim() || null;
+}
+
 export function CollectionDialog({
   open,
   onClose,
@@ -68,14 +91,28 @@ export function CollectionDialog({
   collections: Collection[];
   onSaved: () => void;
 }) {
+  const [tab, setTab] = useState("fields");
   const [name, setName] = useState("");
   const [type, setType] = useState("base");
   const [fields, setFields] = useState<Field[]>([]);
-  const [rules, setRules] = useState<Record<string, string>>({});
+  const [rules, setRules] = useState<Record<string, Rule>>({});
+  const [authRule, setAuthRule] = useState<Rule>({ mode: "locked", expr: "" });
+  const [manageRule, setManageRule] = useState<Rule>({ mode: "locked", expr: "" });
+  const [passwordAuth, setPasswordAuth] = useState({ enabled: true });
+  const [otp, setOtp] = useState({ enabled: false });
+  const [mfa, setMfa] = useState({ enabled: false });
+  const [oauth2, setOauth2] = useState<{ enabled: boolean; providers: any[] }>({
+    enabled: false,
+    providers: [],
+  });
+  const [providersJSON, setProvidersJSON] = useState("[]");
+  const [indexes, setIndexes] = useState<string[]>([]);
+  const [viewQuery, setViewQuery] = useState("");
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     if (!open) return;
+    setTab("fields");
     setName(collection?.name || "");
     setType(collection?.type || "base");
     setFields(
@@ -87,15 +124,28 @@ export function CollectionDialog({
           maxSelect: field.maxSelect || 1,
         })),
     );
-    const nextRules: Record<string, string> = {};
-    for (const [key] of RULES) {
-      const value = (collection as any)?.[key];
-      nextRules[key] = value === null || value === undefined ? "" : String(value);
-    }
+    const nextRules: Record<string, Rule> = {};
+    for (const [key] of RULES) nextRules[key] = toRule((collection as any)?.[key]);
     setRules(nextRules);
+    setAuthRule(toRule(collection?.authRule));
+    setManageRule(toRule(collection?.manageRule));
+    setPasswordAuth({ enabled: collection?.passwordAuth?.enabled !== false });
+    setOtp({ enabled: Boolean(collection?.otp?.enabled) });
+    setMfa({ enabled: Boolean(collection?.mfa?.enabled) });
+    setOauth2({
+      enabled: Boolean(collection?.oauth2?.enabled),
+      providers: collection?.oauth2?.providers || [],
+    });
+    setProvidersJSON(JSON.stringify(collection?.oauth2?.providers || [], null, 2));
+    setIndexes(collection?.indexes || []);
+    setViewQuery(collection?.viewQuery || "");
   }, [open, collection]);
 
   const isEdit = Boolean(collection?.id);
+  const publicRules = useMemo(
+    () => Object.entries(rules).filter(([, rule]) => rule.mode === "public").map(([key]) => key),
+    [rules],
+  );
 
   function updateField(index: number, patch: Partial<Field>) {
     setFields((current) =>
@@ -150,17 +200,57 @@ export function CollectionDialog({
       return next;
     });
 
-    const systemFields = isEdit
+    let systemFields = isEdit
       ? (collection?.fields || []).filter((field) => SYSTEM_FIELDS.has(field.name) || field.system)
       : [];
+
+    // New collections need PocketBase's scaffold system fields (id, created, updated, auth fields, ...).
+    if (!isEdit) {
+      try {
+        const scaffolds = await pb.collections.getScaffolds();
+        systemFields = [
+          ...((scaffolds as any)[type]?.fields || []),
+          { name: "created", type: "autodate", onCreate: true, system: true },
+          { name: "updated", type: "autodate", onCreate: true, onUpdate: true, system: true },
+        ] as any;
+      } catch {
+        systemFields = [
+          { name: "created", type: "autodate", onCreate: true, system: true },
+          { name: "updated", type: "autodate", onCreate: true, onUpdate: true, system: true },
+        ] as any;
+      }
+    }
 
     const payload: Json = {
       name: name.trim(),
       type,
       fields: [...systemFields, ...userFields],
+      indexes: indexes.map((item) => item.trim()).filter(Boolean),
     };
+
     for (const [key] of RULES) {
-      payload[key] = rules[key]?.trim() ? rules[key].trim() : null;
+      payload[key] = fromRule(rules[key] || { mode: "locked", expr: "" });
+    }
+
+    if (type === "auth") {
+      payload.authRule = fromRule(authRule);
+      payload.manageRule = fromRule(manageRule);
+      payload.passwordAuth = passwordAuth;
+      payload.otp = otp;
+      payload.mfa = mfa;
+      let providers: any[] = [];
+      try {
+        providers = providersJSON.trim() ? JSON.parse(providersJSON) : [];
+        if (!Array.isArray(providers)) throw new Error("providers must be an array");
+      } catch {
+        toast.error("OAuth2 providers must be a JSON array.");
+        return;
+      }
+      payload.oauth2 = { ...oauth2, providers };
+    }
+
+    if (type === "view") {
+      payload.viewQuery = viewQuery;
     }
 
     setBusy(true);
@@ -186,7 +276,7 @@ export function CollectionDialog({
       open={open}
       onClose={onClose}
       title={isEdit ? `Edit ${collection?.name}` : "New collection"}
-      description={isEdit ? "Schema and API rules" : "Create a collection and its fields"}
+      description={isEdit ? "Fields, rules, auth, indexes and view query" : "Create a collection and its fields"}
       className="max-w-4xl"
       footer={
         <>
@@ -199,7 +289,7 @@ export function CollectionDialog({
         </>
       }
     >
-      <form id="collection-form" onSubmit={submit} className="space-y-6">
+      <form id="collection-form" onSubmit={submit} className="space-y-5">
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
             <Label htmlFor="collection-name">Name</Label>
@@ -226,168 +316,318 @@ export function CollectionDialog({
           </div>
         </div>
 
-        <div>
-          <div className="mb-2 flex items-center justify-between">
-            <h3 className="font-mono text-[10px] font-bold uppercase tracking-[0.14em]">
-              Fields
-            </h3>
-            <Button variant="outline" size="sm" onClick={addField}>
-              <Plus />
-              Add field
-            </Button>
-          </div>
+        <Tabs
+          tabs={[
+            { value: "fields", label: "Fields" },
+            { value: "rules", label: "API rules" },
+            ...(type === "auth" ? [{ value: "auth", label: "Auth options" }] : []),
+            { value: "indexes", label: "Indexes" },
+            ...(type === "view" ? [{ value: "view", label: "View query" }] : []),
+          ]}
+          value={tab}
+          onChange={setTab}
+        />
 
-          <div className="space-y-2">
-            {fields.map((field, index) => (
-              <div
-                key={field.id || index}
-                className="grid gap-2 border border-border bg-background p-3 sm:grid-cols-[1.2fr_0.8fr_auto_auto]"
-              >
-                <Input
-                  value={field.name}
-                  onChange={(event) => updateField(index, { name: event.target.value })}
-                  placeholder="field name"
-                />
-                <Select
-                  value={field.type}
-                  onChange={(event) => updateField(index, { type: event.target.value })}
+        {tab === "fields" ? (
+          <div>
+            <div className="mb-2 flex items-center justify-between">
+              <h3 className="font-mono text-[10px] font-bold uppercase tracking-[0.14em]">Fields</h3>
+              <Button variant="outline" size="sm" onClick={addField}>
+                <Plus />
+                Add field
+              </Button>
+            </div>
+
+            <div className="space-y-2">
+              {fields.map((field, index) => (
+                <div
+                  key={field.id || index}
+                  className="grid gap-2 border border-border bg-background p-3 sm:grid-cols-[1.2fr_0.8fr_auto_auto]"
                 >
-                  {FIELD_TYPES.map((fieldType) => (
-                    <option key={fieldType} value={fieldType}>
-                      {fieldType}
-                    </option>
-                  ))}
-                </Select>
-                <label className="flex items-center gap-2 px-2 font-mono text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
-                  <input
-                    type="checkbox"
-                    checked={Boolean(field.required)}
-                    onChange={(event) => updateField(index, { required: event.target.checked })}
-                    className="h-4 w-4 accent-[hsl(var(--accent))]"
+                  <Input
+                    value={field.name}
+                    onChange={(event) => updateField(index, { name: event.target.value })}
+                    placeholder="field name"
                   />
-                  Required
-                </label>
+                  <Select
+                    value={field.type}
+                    onChange={(event) => updateField(index, { type: event.target.value })}
+                  >
+                    {FIELD_TYPES.map((fieldType) => (
+                      <option key={fieldType} value={fieldType}>
+                        {fieldType}
+                      </option>
+                    ))}
+                  </Select>
+                  <label className="flex items-center gap-2 px-2 font-mono text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(field.required)}
+                      onChange={(event) => updateField(index, { required: event.target.checked })}
+                      className="h-4 w-4 accent-[hsl(var(--accent))]"
+                    />
+                    Required
+                  </label>
+                  <Button variant="ghost" size="icon" onClick={() => removeField(index)} aria-label="Remove field">
+                    <Trash2 />
+                  </Button>
+
+                  {field.type === "select" ? (
+                    <div className="sm:col-span-4">
+                      <Label>Options (comma separated)</Label>
+                      <Input
+                        value={(field.values || []).join(", ")}
+                        onChange={(event) =>
+                          updateField(index, {
+                            values: event.target.value
+                              .split(",")
+                              .map((value) => value.trim())
+                              .filter(Boolean),
+                          })
+                        }
+                        placeholder="draft, published, archived"
+                      />
+                    </div>
+                  ) : null}
+
+                  {field.type === "file" ? (
+                    <div className="grid gap-2 sm:col-span-4 sm:grid-cols-2">
+                      <div>
+                        <Label>Max files</Label>
+                        <Input
+                          type="number"
+                          min={1}
+                          value={field.maxSelect || 1}
+                          onChange={(event) => updateField(index, { maxSelect: Number(event.target.value) })}
+                        />
+                      </div>
+                      <label className="flex items-end gap-2 pb-2 font-mono text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
+                        <input
+                          type="checkbox"
+                          checked={Boolean(field.protected)}
+                          onChange={(event) => updateField(index, { protected: event.target.checked })}
+                          className="h-4 w-4 accent-[hsl(var(--accent))]"
+                        />
+                        Protected downloads
+                      </label>
+                    </div>
+                  ) : null}
+
+                  {field.type === "relation" ? (
+                    <div className="grid gap-2 sm:col-span-4 sm:grid-cols-2">
+                      <div>
+                        <Label>Related collection</Label>
+                        <Select
+                          value={field.collectionId || ""}
+                          onChange={(event) => updateField(index, { collectionId: event.target.value })}
+                        >
+                          <option value="">—</option>
+                          {collections
+                            .filter((item) => item.type !== "view")
+                            .map((item) => (
+                              <option key={item.id} value={item.id}>
+                                {item.name}
+                              </option>
+                            ))}
+                        </Select>
+                      </div>
+                      <div>
+                        <Label>Max records</Label>
+                        <Input
+                          type="number"
+                          min={1}
+                          value={field.maxSelect || 1}
+                          onChange={(event) => updateField(index, { maxSelect: Number(event.target.value) })}
+                        />
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+              ))}
+              {fields.length === 0 ? (
+                <p className="border border-dashed border-border px-4 py-6 text-center text-xs text-muted-foreground">
+                  No custom fields yet.
+                </p>
+              ) : null}
+            </div>
+          </div>
+        ) : null}
+
+        {tab === "rules" ? (
+          <div className="space-y-4">
+            {publicRules.length ? (
+              <div className="flex items-start gap-2 border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-700 dark:text-amber-400">
+                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                <span>
+                  Public rules: {publicRules.map((rule) => rule.replace("Rule", "")).join(", ")}. Anyone can
+                  perform these operations.
+                </span>
+              </div>
+            ) : null}
+            <p className="text-xs text-muted-foreground">
+              Locked means superuser-only. Public means anyone. Custom is a PocketBase filter expression.
+            </p>
+            {RULES.map(([key, label]) => (
+              <RuleEditor
+                key={key}
+                label={label}
+                value={rules[key] || { mode: "locked", expr: "" }}
+                onChange={(value) => setRules((current) => ({ ...current, [key]: value }))}
+              />
+            ))}
+          </div>
+        ) : null}
+
+        {tab === "auth" && type === "auth" ? (
+          <div className="space-y-4">
+            <RuleEditor label="Auth rule" value={authRule} onChange={setAuthRule} />
+            <RuleEditor label="Manage rule" value={manageRule} onChange={setManageRule} />
+
+            <div className="grid gap-3 sm:grid-cols-3">
+              <Toggle
+                label="Password auth"
+                checked={passwordAuth.enabled}
+                onChange={(enabled) => setPasswordAuth({ ...passwordAuth, enabled })}
+              />
+              <Toggle label="OTP" checked={otp.enabled} onChange={(enabled) => setOtp({ ...otp, enabled })} />
+              <Toggle label="MFA" checked={mfa.enabled} onChange={(enabled) => setMfa({ ...mfa, enabled })} />
+            </div>
+
+            <div className="border border-border p-3">
+              <Toggle
+                label="OAuth2"
+                checked={oauth2.enabled}
+                onChange={(enabled) => setOauth2({ ...oauth2, enabled })}
+              />
+              <div className="mt-3">
+                <Label>OAuth2 providers (JSON array)</Label>
+                <Textarea
+                  rows={10}
+                  className="font-mono"
+                  value={providersJSON}
+                  onChange={(event) => setProvidersJSON(event.target.value)}
+                  placeholder='[{"name":"github","clientId":"...","clientSecret":"..."}]'
+                />
+              </div>
+            </div>
+          </div>
+        ) : null}
+
+        {tab === "indexes" ? (
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <p className="text-xs text-muted-foreground">
+                SQLite index definitions. Use <code>CREATE INDEX ...</code> or <code>CREATE UNIQUE INDEX ...</code>.
+              </p>
+              <Button variant="outline" size="sm" onClick={() => setIndexes((current) => [...current, ""])}>
+                <Plus />
+                Add index
+              </Button>
+            </div>
+            {indexes.map((index, position) => (
+              <div key={position} className="flex items-start gap-2">
+                <Textarea
+                  rows={3}
+                  className="font-mono"
+                  value={index}
+                  onChange={(event) =>
+                    setIndexes((current) =>
+                      current.map((item, indexPosition) => (indexPosition === position ? event.target.value : item)),
+                    )
+                  }
+                  placeholder={`CREATE UNIQUE INDEX idx_${name || "collection"}_field ON ${name || "collection"} (field)`}
+                />
                 <Button
                   variant="ghost"
                   size="icon"
-                  onClick={() => removeField(index)}
-                  aria-label="Remove field"
+                  onClick={() => setIndexes((current) => current.filter((_, indexPosition) => indexPosition !== position))}
+                  aria-label="Remove index"
                 >
                   <Trash2 />
                 </Button>
-
-                {field.type === "select" ? (
-                  <div className="sm:col-span-4">
-                    <Label>Options (comma separated)</Label>
-                    <Input
-                      value={(field.values || []).join(", ")}
-                      onChange={(event) =>
-                        updateField(index, {
-                          values: event.target.value
-                            .split(",")
-                            .map((value) => value.trim())
-                            .filter(Boolean),
-                        })
-                      }
-                      placeholder="draft, published, archived"
-                    />
-                  </div>
-                ) : null}
-
-                {field.type === "file" ? (
-                  <div className="grid gap-2 sm:col-span-4 sm:grid-cols-2">
-                    <div>
-                      <Label>Max files</Label>
-                      <Input
-                        type="number"
-                        min={1}
-                        value={field.maxSelect || 1}
-                        onChange={(event) =>
-                          updateField(index, { maxSelect: Number(event.target.value) })
-                        }
-                      />
-                    </div>
-                    <label className="flex items-end gap-2 pb-2 font-mono text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
-                      <input
-                        type="checkbox"
-                        checked={Boolean(field.protected)}
-                        onChange={(event) =>
-                          updateField(index, { protected: event.target.checked })
-                        }
-                        className="h-4 w-4 accent-[hsl(var(--accent))]"
-                      />
-                      Protected downloads
-                    </label>
-                  </div>
-                ) : null}
-
-                {field.type === "relation" ? (
-                  <div className="grid gap-2 sm:col-span-4 sm:grid-cols-2">
-                    <div>
-                      <Label>Related collection</Label>
-                      <Select
-                        value={field.collectionId || ""}
-                        onChange={(event) =>
-                          updateField(index, { collectionId: event.target.value })
-                        }
-                      >
-                        <option value="">—</option>
-                        {collections
-                          .filter((item) => item.type !== "view")
-                          .map((item) => (
-                            <option key={item.id} value={item.id}>
-                              {item.name}
-                            </option>
-                          ))}
-                      </Select>
-                    </div>
-                    <div>
-                      <Label>Max records</Label>
-                      <Input
-                        type="number"
-                        min={1}
-                        value={field.maxSelect || 1}
-                        onChange={(event) =>
-                          updateField(index, { maxSelect: Number(event.target.value) })
-                        }
-                      />
-                    </div>
-                  </div>
-                ) : null}
               </div>
             ))}
-            {fields.length === 0 ? (
+            {!indexes.length ? (
               <p className="border border-dashed border-border px-4 py-6 text-center text-xs text-muted-foreground">
-                No custom fields yet.
+                No indexes yet.
               </p>
             ) : null}
           </div>
-        </div>
+        ) : null}
 
-        <div>
-          <h3 className="mb-2 font-mono text-[10px] font-bold uppercase tracking-[0.14em]">
-            API rules
-          </h3>
-          <p className="mb-3 text-xs text-muted-foreground">
-            Empty means superuser-only (locked). Superuser access always works.
-          </p>
-          <div className="grid gap-3">
-            {RULES.map(([key, label]) => (
-              <div key={key}>
-                <Label htmlFor={key}>{label}</Label>
-                <Input
-                  id={key}
-                  value={rules[key] || ""}
-                  onChange={(event) =>
-                    setRules((current) => ({ ...current, [key]: event.target.value }))
-                  }
-                  placeholder="@request.auth.id != ''"
-                />
-              </div>
-            ))}
+        {tab === "view" && type === "view" ? (
+          <div>
+            <Label>View query</Label>
+            <Textarea
+              rows={14}
+              className="font-mono"
+              value={viewQuery}
+              onChange={(event) => setViewQuery(event.target.value)}
+              placeholder="SELECT id, title FROM posts WHERE published = 1"
+            />
+            <p className="mt-1 text-xs text-muted-foreground">
+              A read-only SELECT query. PocketBase derives the fields from the result columns.
+            </p>
           </div>
-        </div>
+        ) : null}
       </form>
     </Dialog>
+  );
+}
+
+function RuleEditor({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: Rule;
+  onChange: (value: Rule) => void;
+}) {
+  return (
+    <div className="grid gap-2 border border-border p-3 sm:grid-cols-[180px_1fr] sm:items-start">
+      <Label className="pt-2">{label}</Label>
+      <div className="space-y-2">
+        <Select
+          value={value.mode}
+          onChange={(event) =>
+            onChange({ ...value, mode: event.target.value as Rule["mode"] })
+          }
+        >
+          <option value="locked">Locked (superuser only)</option>
+          <option value="public">Public (anyone)</option>
+          <option value="custom">Custom expression</option>
+        </Select>
+        {value.mode === "custom" ? (
+          <Input
+            value={value.expr}
+            onChange={(event) => onChange({ ...value, expr: event.target.value })}
+            placeholder='@request.auth.id != ""'
+          />
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function Toggle({
+  label,
+  checked,
+  onChange,
+}: {
+  label: string;
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+}) {
+  return (
+    <label className="flex cursor-pointer items-center gap-2 border border-border px-3 py-2 font-mono text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(event) => onChange(event.target.checked)}
+        className="h-4 w-4 accent-[hsl(var(--accent))]"
+      />
+      {label}
+    </label>
   );
 }

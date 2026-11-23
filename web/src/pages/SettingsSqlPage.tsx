@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Download, Play, Trash2 } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Database, Download, Play, Save, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { PageBody, PageHeader } from "@/components/PageHeader";
 import {
@@ -42,6 +42,30 @@ export function SettingsSqlPage() {
       return [];
     }
   });
+  const [saved, setSaved] = useState<{ name: string; query: string }[]>(() => {
+    try {
+      return JSON.parse(localStorage.getItem("ekilie-box-sql-saved") || "[]");
+    } catch {
+      return [];
+    }
+  });
+  const [collections, setCollections] = useState<{ id: string; name: string }[]>([]);
+
+  useEffect(() => {
+    pb.collections
+      .getFullList({ sort: "name" })
+      .then((list) => setCollections(list.map((item: any) => ({ id: item.id, name: item.name }))))
+      .catch(() => {});
+  }, []);
+
+  function saveQuery() {
+    const name = window.prompt("Name this query", `query ${saved.length + 1}`);
+    if (!name) return;
+    const next = [{ name, query }, ...saved.filter((item) => item.name !== name)].slice(0, 20);
+    setSaved(next);
+    localStorage.setItem("ekilie-box-sql-saved", JSON.stringify(next));
+    toast.success("Query saved.");
+  }
 
   async function run() {
     const sql = query.trim();
@@ -115,40 +139,98 @@ export function SettingsSqlPage() {
             </CardHeader>
             <CardContent>
               <Textarea
-                rows={10}
+                rows={12}
                 className="font-mono"
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
+                onKeyDown={(event) => {
+                  if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+                    event.preventDefault();
+                    run();
+                  }
+                }}
                 spellCheck={false}
               />
+              <div className="mt-2 flex items-center justify-between">
+                <p className="text-[10px] text-muted-foreground">Cmd/Ctrl+Enter to execute</p>
+                <Button variant="outline" size="sm" onClick={saveQuery}>
+                  <Save />
+                  Save query
+                </Button>
+              </div>
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader className="flex items-center justify-between">
-              <CardTitle>History</CardTitle>
-              <Button variant="ghost" size="icon" onClick={clearHistory} aria-label="Clear history">
-                <Trash2 />
-              </Button>
-            </CardHeader>
-            <CardContent className="space-y-1 p-3">
-              {history.length ? (
-                history.map((item, index) => (
+          <div className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>Schema</CardTitle>
+              </CardHeader>
+              <CardContent className="max-h-56 space-y-1 overflow-y-auto p-3 scrollbar-thin">
+                {collections.map((collection) => (
                   <button
-                    key={`${item}-${index}`}
+                    key={collection.id}
                     type="button"
-                    onClick={() => setQuery(item)}
-                    className="block w-full truncate border border-transparent px-2 py-1.5 text-left font-mono text-[10px] text-muted-foreground hover:border-border hover:text-foreground"
-                    title={item}
+                    onClick={() => setQuery(`SELECT * FROM ${collection.name} LIMIT 100`)}
+                    className="flex w-full items-center gap-2 px-2 py-1.5 text-left font-mono text-[10px] text-muted-foreground hover:bg-muted/40 hover:text-foreground"
                   >
-                    {item.replace(/\s+/g, " ").slice(0, 48)}
+                    <Database className="h-3 w-3" />
+                    <span className="truncate">{collection.name}</span>
                   </button>
-                ))
-              ) : (
-                <p className="p-2 text-xs text-muted-foreground">No recent queries.</p>
-              )}
-            </CardContent>
-          </Card>
+                ))}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="flex items-center justify-between">
+                <CardTitle>Saved</CardTitle>
+                <span className="font-mono text-[9px] text-muted-foreground">{saved.length}</span>
+              </CardHeader>
+              <CardContent className="space-y-1 p-3">
+                {saved.length ? (
+                  saved.map((item) => (
+                    <button
+                      key={item.name}
+                      type="button"
+                      onClick={() => setQuery(item.query)}
+                      className="block w-full truncate border border-transparent px-2 py-1.5 text-left font-mono text-[10px] text-muted-foreground hover:border-border hover:text-foreground"
+                      title={item.query}
+                    >
+                      {item.name}
+                    </button>
+                  ))
+                ) : (
+                  <p className="p-2 text-xs text-muted-foreground">No saved queries.</p>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="flex items-center justify-between">
+                <CardTitle>History</CardTitle>
+                <Button variant="ghost" size="icon" onClick={clearHistory} aria-label="Clear history">
+                  <Trash2 />
+                </Button>
+              </CardHeader>
+              <CardContent className="max-h-56 space-y-1 overflow-y-auto p-3 scrollbar-thin">
+                {history.length ? (
+                  history.map((item, index) => (
+                    <button
+                      key={`${item}-${index}`}
+                      type="button"
+                      onClick={() => setQuery(item)}
+                      className="block w-full truncate border border-transparent px-2 py-1.5 text-left font-mono text-[10px] text-muted-foreground hover:border-border hover:text-foreground"
+                      title={item}
+                    >
+                      {item.replace(/\s+/g, " ").slice(0, 48)}
+                    </button>
+                  ))
+                ) : (
+                  <p className="p-2 text-xs text-muted-foreground">No recent queries.</p>
+                )}
+              </CardContent>
+            </Card>
+          </div>
         </div>
 
         {error ? (

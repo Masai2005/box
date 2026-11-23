@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Eye, RefreshCw, Search, Settings2, Trash2 } from "lucide-react";
+import { Eye, Radio, RefreshCw, Search, Settings2, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { PageBody, PageHeader } from "@/components/PageHeader";
 import {
@@ -100,13 +100,15 @@ export function LogsPage() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [maxDays, setMaxDays] = useState("7");
   const [busy, setBusy] = useState(false);
+  const [live, setLive] = useState(false);
+  const [liveTick, setLiveTick] = useState(0);
 
   const combinedFilter = useMemo(() => {
     return [filter.trim(), level].filter(Boolean).join(" && ");
   }, [filter, level]);
 
-  async function load() {
-    setLoading(true);
+  async function load(silent = false) {
+    if (!silent) setLoading(true);
     setError("");
     try {
       const [list, chart] = await Promise.all([
@@ -122,13 +124,19 @@ export function LogsPage() {
     } catch (err) {
       setError(errorMessage(err));
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }
 
   useEffect(() => {
-    load();
-  }, [page, combinedFilter]);
+    load(live && liveTick > 0);
+  }, [page, combinedFilter, liveTick]);
+
+  useEffect(() => {
+    if (!live) return;
+    const id = setInterval(() => setLiveTick((value) => value + 1), 3000);
+    return () => clearInterval(id);
+  }, [live]);
 
   useEffect(() => {
     setPage(1);
@@ -185,7 +193,15 @@ export function LogsPage() {
         eyebrow="observability"
         actions={
           <>
-            <Button variant="outline" size="sm" onClick={load} disabled={loading}>
+            <Button
+              variant={live ? "default" : "outline"}
+              size="sm"
+              onClick={() => setLive((value) => !value)}
+            >
+              <Radio />
+              {live ? "Live" : "Go live"}
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => load()} disabled={loading}>
               <RefreshCw />
               Refresh
             </Button>
