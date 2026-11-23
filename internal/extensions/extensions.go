@@ -1,13 +1,13 @@
 // Package extensions is Ekilie Box's extension registry.
 //
-// The standard PocketOne set (settings, tokens/OAuth, remotes, MCP, pages, S3 redirects, PITR, backups, bulk mail and
+// The standard PocketOne set (settings, API tokens/OAuth, remotes, MCP, pages, S3 redirects, PITR, backups, bulk mail and
 // deploy) is already on every app. This package is where Ekilie Box's own extras are added, so the composition root
 // stays a list of product decisions rather than extension wiring.
 package extensions
 
 import (
-	"github.com/pockethost/pocketone/ext/mailtrap"
-	"github.com/pockethost/pocketone/ext/vacuum"
+	"pocketone.dev/ext/mailtrap"
+	"pocketone.dev/ext/vacuum"
 
 	"github.com/ekilie/box/internal/app"
 )

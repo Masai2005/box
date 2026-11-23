@@ -24,11 +24,11 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/ekilie/box/internal/ui"
-	"github.com/pockethost/pocketone/ext/config"
-	"github.com/pockethost/pocketone/ext/extkit"
-	"github.com/pockethost/pocketone/ext/jsvm"
-	"github.com/pockethost/pocketone/ext/pages"
-	"github.com/pockethost/pocketone/ext/standard"
+	"pocketone.dev/ext/config"
+	"pocketone.dev/ext/extkit"
+	"pocketone.dev/ext/jsvm"
+	"pocketone.dev/ext/pages"
+	"pocketone.dev/ext/standard"
 )
 
 const (
@@ -116,6 +116,7 @@ func New() (*App, error) {
 		return nil, err
 	}
 	appCfg, _ := config.App.Get()
+	srvCfg, _ := config.Server.Get()
 	if err := cfg.AllowEnv(appCfg.EnvAllow); err != nil {
 		return nil, err
 	}
@@ -160,7 +161,7 @@ func New() (*App, error) {
 	pb.RootCmd.PersistentFlags().BoolVar(
 		&a.HooksWatch,
 		"hooksWatch",
-		or(appCfg.HooksWatch, true),
+		or(srvCfg.HooksWatch, true),
 		"auto restart the app on ekilie_box_hooks file change; it has no effect on Windows",
 	)
 	pb.RootCmd.PersistentFlags().StringVar(
@@ -172,11 +173,11 @@ func New() (*App, error) {
 	pb.RootCmd.PersistentFlags().BoolVar(
 		&a.Automigrate,
 		"automigrate",
-		or(appCfg.Automigrate, true),
+		or(srvCfg.Automigrate, true),
 		"enable/disable auto migrations",
 	)
 
-	publicDir := cfg.ResolvePath(appCfg.PublicDir)
+	publicDir := cfg.ResolvePath(srvCfg.PublicDir)
 	if publicDir == "" {
 		publicDir = defaultPublicDir()
 	}
@@ -189,7 +190,7 @@ func New() (*App, error) {
 	pb.RootCmd.PersistentFlags().BoolVar(
 		&a.IndexFallback,
 		"indexFallback",
-		or(appCfg.IndexFallback, true),
+		or(srvCfg.IndexFallback, true),
 		"fallback the request to index.html on missing static path, e.g. when pretty urls are used with an SPA",
 	)
 	pb.RootCmd.PersistentFlags().StringVar(

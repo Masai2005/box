@@ -51,8 +51,8 @@ export function SettingsTokensPage() {
     setLoading(true);
     try {
       const [list, scopeList] = await Promise.all([
-        pb.send("/api/_c/tokens/v1", {}),
-        pb.send("/api/_c/tokens/v1/scopes", {}),
+        pb.send("/api/_c/api-tokens/v1", {}),
+        pb.send("/api/_c/api-tokens/v1/scopes", {}),
       ]);
       setTokens(list.items || []);
       setScopes(scopeList.scopes || []);
@@ -73,7 +73,7 @@ export function SettingsTokensPage() {
     setBusy(true);
     setCreated("");
     try {
-      const result = await pb.send("/api/_c/tokens/v1", {
+      const result = await pb.send("/api/_c/api-tokens/v1", {
         method: "POST",
         body: {
           name: name.trim(),
@@ -99,7 +99,7 @@ export function SettingsTokensPage() {
   async function revoke(token: Token) {
     if (!window.confirm(`Revoke "${token.name || token.prefix}"?`)) return;
     try {
-      await pb.send(`/api/_c/tokens/v1/${token.id}`, { method: "DELETE" });
+      await pb.send(`/api/_c/api-tokens/v1/${token.id}`, { method: "DELETE" });
       toast.success("Token revoked.");
       load();
     } catch (err) {

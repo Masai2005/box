@@ -73,7 +73,7 @@ export function ApiExplorerPage() {
     if (tab === "system") {
       const path =
         systemOp === "tokens"
-          ? "/api/_c/tokens/v1"
+          ? "/api/_c/api-tokens/v1"
           : systemOp === "settings"
             ? "/api/settings"
             : systemOp === "logs"

@@ -41,7 +41,7 @@ export function SecurityPage() {
           pb.collections.getFullList({ sort: "name" }),
           pb.settings.getAll(),
           pb.backups.getFullList().catch(() => []),
-          pb.send("/api/_c/tokens/v1", {}).catch(() => ({ items: [] })),
+          pb.send("/api/_c/api-tokens/v1", {}).catch(() => ({ items: [] })),
         ]);
 
         const list: Advisory[] = [];

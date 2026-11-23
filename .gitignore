@@ -44,6 +44,10 @@ go.work.sum
 .DS_Store
 
 
+# Generated JS hook typings
+/types.d.ts
+/tsconfig.json
+
 # UI dependencies
 web/node_modules/
 web/.vite/

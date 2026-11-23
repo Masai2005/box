@@ -14,7 +14,7 @@ package main
 import (
 	"log"
 
-	"github.com/pockethost/pocketone/ext/extkit"
+	"pocketone.dev/ext/extkit"
 
 	"github.com/ekilie/box/internal/app"
 	"github.com/ekilie/box/internal/commands"

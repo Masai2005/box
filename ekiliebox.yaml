@@ -8,12 +8,12 @@ app:
   dir: ekilie_box_data
   hooks_dir: ekilie_box_hooks
   migrations_dir: ekilie_box_migrations
-  index_fallback: true
-  # public_dir: ./pb_public   # optional static files served at /
 
 server:
   http: 127.0.0.1:8090
   # https: ":443"
+  index_fallback: true
+  # public_dir: ./pb_public   # optional static files served at /
 
 # Compact SQLite databases weekly. Admins can change this in Settings → Backups.
 vacuum:

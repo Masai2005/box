@@ -13,9 +13,9 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/pockethost/pocketone/ext/config"
-	"github.com/pockethost/pocketone/ext/pocker"
-	"github.com/pockethost/pocketone/ext/upgrade"
+	"pocketone.dev/ext/config"
+	"pocketone.dev/ext/pocker"
+	"pocketone.dev/ext/upgrade"
 
 	"github.com/ekilie/box/internal/app"
 )
