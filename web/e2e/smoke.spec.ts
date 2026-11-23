@@ -9,8 +9,7 @@ test("login and command palette", async ({ page }) => {
   const search = page.getByRole("textbox", { name: "Search pages, collections, actions and records" });
   await expect(search).toBeVisible();
   await search.fill("schema");
-  await expect(page.getByRole("option", { name: /Schema \/ ERD/ })).toBeVisible();
-  await page.keyboard.press("Enter");
+  await page.getByRole("option", { name: /Schema \/ ERD/ }).click();
   await expect(page.getByRole("heading", { name: "Schema" })).toBeVisible();
 });
 
@@ -79,4 +78,29 @@ test("unsaved settings guard", async ({ page }) => {
   await expect(page).toHaveURL(/\/settings$/);
   expect(prompted).toBe(true);
   await appName.fill(original);
+});
+
+test("create, run and delete a scheduled HTTP request", async ({ page }) => {
+  await login(page);
+  await page.goto("/settings/crons");
+  await expect(page.getByRole("heading", { name: "Crons" })).toBeVisible();
+  await expect(page.getByText("Scheduled requests", { exact: true })).toBeVisible();
+
+  const name = `Cron smoke ${Date.now()}`;
+  await page.getByRole("button", { name: "New request" }).first().click();
+  await page.locator("#request-name").fill(name);
+  await page.locator("#request-schedule").fill("*/5 * * * *");
+  await page.locator("#request-method").selectOption("GET");
+  await page.locator("#request-url").fill(new URL("/api/health", page.url()).toString());
+  await page.getByRole("button", { name: "Create request" }).click();
+  await expect(page.getByRole("dialog")).toBeHidden();
+
+  const row = page.getByRole("row", { name: new RegExp(name) });
+  await expect(row).toBeVisible();
+  await page.getByRole("button", { name: `Run ${name} now` }).click();
+  await expect(row.getByText("HTTP 200")).toBeVisible({ timeout: 10_000 });
+
+  page.once("dialog", (dialog) => dialog.accept());
+  await page.getByRole("button", { name: `Delete ${name}` }).click();
+  await expect(page.getByRole("row", { name: new RegExp(name) })).toHaveCount(0);
 });

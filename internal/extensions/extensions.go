@@ -10,10 +10,13 @@ import (
 	"pocketone.dev/ext/vacuum"
 
 	"github.com/ekilie/box/internal/app"
+	"github.com/ekilie/box/internal/scheduled"
 )
 
 // Register adds Ekilie Box's built-in extensions to the app.
 func Register(box *app.App) {
+	scheduled.Register(box.PB)
+
 	box.Add(
 		// Compact SQLite databases on a schedule (Settings → Backups → Vacuum).
 		vacuum.New(),

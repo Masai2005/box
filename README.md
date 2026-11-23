@@ -87,6 +87,7 @@ That is the whole setup. Your data and uploads are created in `ekilie_box_data` 
 - API explorer, schema view and realtime inspector.
 - SQL console with schema browsing, saved queries and CSV export.
 - Application, mail, storage, backup, cron, token, import and export settings.
+- Crons: create and run scheduled HTTP requests, and trigger jobs registered in code.
 - Bulk email campaigns and suppression management.
 - Security advisories, runtime information and migration history.
 
