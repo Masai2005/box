@@ -1,115 +1,222 @@
 # Ekilie Box
 
-**A single-file, all-in-one "backend-in-a-box" with a custom Ekilie Cloud-style superuser UI.**
+### The backend-in-a-box, built by [Ekilie](https://github.com/ekilie).
 
-Ekilie Box compiles PocketOne/PocketBase, an embedded SQLite database, auth, file storage, realtime APIs, backups,
-point-in-time restore, JS hooks, MCP, API tokens, pages, bulk mail and deploy into one portable binary — plus its own
-superuser console built with React, TanStack Router and Tailwind.
+**One file. One command. A complete backend and admin console.**
 
-This is **not a SaaS**: there is one account type (the superuser) and one console. No customer UI, no `users`
-collection requirement, no tenancy.
+Ekilie Box gives you a database, user accounts, file storage, realtime updates, email, scheduled jobs, backups and a
+polished admin console — all in a single portable binary. No database server, no containers, no cloud account, no
+separate frontend to deploy.
 
-```bash
-make build
-./ekilie-box serve
-```
-
-```
-> Console: http://127.0.0.1:8090/
-> REST API: http://127.0.0.1:8090/api/
-```
-
-The stock PocketBase dashboard is not part of release builds (`-tags no_ui`). `/` is your console; `/api/...` is the
-backend.
+Download it, start it, and you have somewhere to build.
 
 <p align="center">
-  <img src="docs/images/console-collections.png" alt="Ekilie Box superuser console — collections view" width="100%" />
+  <img src="docs/images/console-collections.png" alt="Ekilie Box console — collections view" width="100%" />
 </p>
 
+## Why Ekilie Box
 
-## Console
+- **One binary.** The app, database, API and console ship together. Nothing else to install or wire up.
+- **Complete from day one.** Store data, manage accounts, upload files, push realtime updates, send email, run
+  scheduled jobs and take backups without stitching together services.
+- **A console you will actually enjoy.** Create collections, edit records, browse files, inspect logs and change
+  settings visually. No SQL required — but it is there when you want it.
+- **Private by design.** New collections start locked to your owner account. You decide what is public.
+- **Portable.** Your database and uploads live in one data folder. Move it, back it up, or run it from a USB drive.
+- **Yours.** Self-hosted, MIT licensed, no SaaS lock-in and no telemetry.
+- **API-first.** Every screen in the console uses the same clean REST and realtime APIs your apps can call.
 
-- Login with the PocketBase `_superusers` account.
-- Dashboard overview with collections, superusers, backups, cron jobs and recent logs.
-- Collections: browse collections, filter/paginate records, create/edit/delete records, dynamic field form, file
-  uploads, realtime refresh, API preview, schema/rules editor and system collections.
-- Logs: volume chart, filters, levels, log detail and log retention settings.
-- Settings: application, mail/SMTP, storage/S3, backups/restore/PITR/vacuum, crons, API tokens, SQL console and
-  collection export/import.
-- Bulk mail: campaigns and suppressions.
-- Ekilie Cloud design: warm paper, near-black ink, orange accent, dot grid, 2px rules, square corners, mono labels,
-  light/dark themes, responsive sidebar with an icon rail, tooltips and a Cmd/Ctrl+B toggle.
+Made for side projects, internal tools, prototypes, mobile app backends and small products that need a real backend
+without a platform bill.
 
-Screens are single-superuser only; every API call uses `pb.collection("_superusers")` auth.
+## Quick start
 
-## Requirements
+### 1. Get the binary
 
-- **Go 1.27+**
-- **Node.js 20+** (only to build the console)
-- No local PocketOne checkout is needed. PocketOne core and its `ext/*` modules are pinned to the
-  [`ekilie/pocketone`](https://github.com/ekilie/pocketone) fork in `go.mod`'s `replace` block, so `go mod tidy` and
-  `go build` work on any machine with network access.
-
-### Updating PocketOne
-
-Go does not support a moving branch in `go.mod`; a branch name is resolved to an immutable commit pseudo-version.
-To follow the fork's `main` without editing versions by hand:
+Download the release for your platform from
+[github.com/ekilie/box/releases](https://github.com/ekilie/box/releases), or build it from source:
 
 ```bash
-make update-pocketone
-# or
-make update-pocketone REF=my-branch
-```
-
-The script rewrites every PocketOne replace and runs `go mod tidy`. Commit `go.mod` and `go.sum` afterwards.
-
-## Build and run
-
-```bash
-# Build the console into internal/ui/dist, then the binary with no stock UI
+git clone https://github.com/ekilie/box.git
+cd box
 make build
-
-# Run without building the console (uses the committed dist)
-go run -tags no_ui ./cmd/box serve
-
-# UI hot reload: Vite proxies /api and /_ to the Go process on :8090
-make dev-ui
-go run -tags no_ui ./cmd/box serve
 ```
 
-`CGO_ENABLED=0` uses the pure-Go SQLite driver, so the result is a single statically linked executable.
+### 2. Create your owner account
 
-### First superuser
-
-There is no public signup. Create the only account from the CLI:
+There is no public signup. The first account owns the instance.
 
 ```bash
 ./ekilie-box superuser upsert you@example.com 'a-strong-password'
 ```
 
-Then open `http://127.0.0.1:8090/` and sign in.
+### 3. Start Ekilie Box
 
-### Security
+```bash
+./ekilie-box serve
+```
 
-Lock collection API rules to `null` (superuser-only) or set explicit rules. Superusers bypass API rules, so the
-console keeps working while anonymous requests are denied.
+Open **http://127.0.0.1:8090/** and sign in.
 
-File downloads are public by default in PocketBase. To protect uploaded files, mark the file field as **Protected**
-in the collection editor. Protected downloads then require a file token or a matching view rule.
+```
+Console:  http://127.0.0.1:8090/
+API:      http://127.0.0.1:8090/api/
+```
 
-## Architecture
+That is the whole setup. Your data and uploads are created in `ekilie_box_data` beside the binary.
+
+## Your first five minutes
+
+1. **Create a collection** — think of it as a table. In the console, open **Collections**, choose **New collection**
+   and add fields such as `title`, `body`, `published` or `cover`.
+2. **Add a record** — open the collection and create your first row. File fields accept uploads right in the console.
+3. **Try the API** — open **API explorer** to send requests against your new collection and copy the exact call for
+   your app.
+4. **Invite your app** — use the REST API from any language, or connect a web or mobile client to the realtime feed.
+5. **Make it yours** — change the app name, colours, mail settings and backups under **Settings**.
+
+## What is inside
+
+### Console
+
+- Dashboard with instance health, database size, collections, users, backups, cron jobs and recent errors.
+- Collection and record management with filters, sorting, pagination, relations and file uploads.
+- URL-addressable record editor, so you can link directly to a row.
+- Command palette (`Cmd/Ctrl+K`), collapsible icon sidebar (`Cmd/Ctrl+B`), light and dark themes.
+- Logs with filters, volume charts and a live tail.
+- API explorer, schema view and realtime inspector.
+- SQL console with schema browsing, saved queries and CSV export.
+- Application, mail, storage, backup, cron, token, import and export settings.
+- Bulk email campaigns and suppression management.
+- Security advisories, runtime information and migration history.
+
+### Platform
+
+- Embedded SQLite database with automatic migrations.
+- Email/password accounts, one-time passwords, MFA and OAuth2 providers.
+- File storage on disk or S3-compatible storage, with protected file fields.
+- REST API, realtime subscriptions, API tokens and request logs.
+- Scheduled jobs, email delivery, backups, point-in-time restore and vacuum.
+- Extensible with JavaScript hooks, custom pages and MCP.
+
+## Requirements
+
+**To run:** a prebuilt binary needs nothing else. Supported platforms are published on the
+[releases page](https://github.com/ekilie/box/releases).
+
+**To build from source:**
+
+- Go 1.27+
+- Node.js 20+ (only for the console)
+- No external database or services
+
+## Configuration
+
+Ekilie Box reads `ekiliebox.yaml` (or `--config <path>`) and a `.env` file beside it. Command-line flags win over
+config values.
+
+```yaml
+app:
+  dir: ekilie_box_data
+  hooks_dir: ekilie_box_hooks
+  migrations_dir: ekilie_box_migrations
+
+server:
+  http: 127.0.0.1:8090
+
+vacuum:
+  enabled: true
+  every: 168h
+
+pitr:
+  enabled: true
+  retention: 72h
+```
+
+See every setting the binary understands:
+
+```bash
+./ekilie-box config
+./ekilie-box config --json
+```
+
+## Commands
+
+```bash
+./ekilie-box serve              # start Ekilie Box
+./ekilie-box info               # version, paths and console URL
+./ekilie-box info --json
+./ekilie-box superuser upsert you@example.com 'a-strong-password'
+./ekilie-box migrate            # run pending migrations
+./ekilie-box upgrade            # replace with the latest release, keeping the old binary
+```
+
+Advanced workflows are available too: `remote`, `deploy`, `dev`, `pull`, `logs`, `token`, `oauth`, `pages` and
+`pitr`. Run `./ekilie-box --help` for the full list.
+
+`upgrade` expects release archives named `ekilie-box_<version>_<os>_<arch>.zip`, which is what
+`.goreleaser.yaml` produces.
+
+## API
+
+Everything the console does is available over HTTP. Use it from a web app, mobile app, script or another service.
+
+```bash
+curl http://127.0.0.1:8090/api/health
+```
+
+- `GET /api/health` — public health check. `X-Powered-By` reports the Ekilie Box version.
+- `GET /api/...` — records, authentication, files, realtime, settings and operational APIs.
+- `GET /` — the console.
+
+Sign in with your owner account to get an API token, then send it as `Authorization: <token>`. The console's **API
+explorer** shows working requests for every endpoint, with copy-ready cURL.
+
+## Security
+
+- New collections are locked to the owner account. Open access deliberately with API rules.
+- The owner account bypasses collection rules, so the console always works while anonymous requests are denied.
+- Mark file fields as **Protected** to require signed access. Otherwise uploaded files are served publicly.
+- Use HTTPS and a reverse proxy when exposing Ekilie Box to the internet.
+- Keep `ekiliebox.yaml`, `.env` and the data folder out of version control.
+
+## Development
+
+```bash
+# Build the console into internal/ui/dist, then the binary
+make build
+
+# Run without rebuilding the console (uses the committed build)
+go run -tags no_ui ./cmd/box serve
+
+# Console hot reload (Vite proxies /api to the Go process on :8090)
+make dev-ui
+go run -tags no_ui ./cmd/box serve
+```
+
+The console's production build is committed so `go build` works on a machine without Node. `CGO_ENABLED=0` uses the
+pure-Go SQLite driver, producing a single statically linked executable.
+
+```bash
+make test     # Go tests
+make tidy     # tidy modules
+make clean    # remove build output
+make release  # build release archives
+```
+
+### Project layout
 
 ```
 .
 ├── cmd/
 │   └── box/
-│       └── main.go              composition root
+│       └── main.go              entry point
 ├── internal/
-│   ├── app/                     PocketBase/PocketOne setup, config, static serving
-│   ├── commands/                `info`, `upgrade`
-│   ├── extensions/              vacuum, dev mailtrap
-│   └── ui/                      //go:embed dist
-│       └── dist/                built console (committed so `go build` works without Node)
+│   ├── app/                     bootstrap, config and static serving
+│   ├── commands/                info, upgrade and other commands
+│   ├── extensions/              vacuum and development mail
+│   └── ui/                      embedded console assets
+│       └── dist/                built console (committed)
 ├── web/                         React + TanStack Router + Tailwind console
 │   ├── src/
 │   │   ├── components/
@@ -131,65 +238,14 @@ The Go process serves:
 ```
 GET /             -> embedded console (SPA fallback for client routes)
 GET /assets/...   -> console assets
-GET /api/...      -> PocketBase/PocketOne API
-GET /_/           -> not built (release uses -tags no_ui)
+GET /api/...      -> REST, realtime and settings APIs
 ```
 
-`--publicDir` can override the embedded UI with a directory (useful for debugging a Vite build from disk).
-
-## Configuration
-
-Ekilie Box reads `ekiliebox.yaml` (or `--config <path>`) and a `.env` beside it. Flags win over config values.
-A legacy `pocketone.yaml` is still read when `ekiliebox.yaml` is not present.
-
-```yaml
-app:
-  dir: ekilie_box_data
-  hooks_dir: ekilie_box_hooks
-  migrations_dir: ekilie_box_migrations
-
-server:
-  http: 127.0.0.1:8090
-
-vacuum:
-  enabled: true
-  every: 168h
-
-pitr:
-  enabled: true
-  retention: 72h
-```
-
-List every section this binary understands:
-
-```bash
-./ekilie-box config
-./ekilie-box config --json
-```
-
-## Commands
-
-```bash
-./ekilie-box serve              # start the app
-./ekilie-box info               # version, engine, paths, console URL
-./ekilie-box info --json
-./ekilie-box superuser upsert you@example.com 'a-strong-password'
-./ekilie-box migrate            # run ekilie_box_migrations
-./ekilie-box upgrade            # replace with the latest GitHub release, keep the old binary
-```
-
-PocketOne's contract commands are also available (`remote`, `deploy`, `dev`, `pull`, `logs`, `token`, `oauth`, `pages`,
-`pitr`, ...). Run `./ekilie-box --help`.
-
-`upgrade` expects release archives named `ekilie-box_<version>_<os>_<arch>.zip`, which is what
-`.goreleaser.yaml` produces.
-
-## Health and API
-
-- `GET /api/health` — public health check; `X-Powered-By` is `Ekilie Box <version>`.
-- `GET /` — the custom console.
-- `GET /api/...` — records, auth, files, realtime, settings and contract APIs.
+`--publicDir` can override the embedded console with a directory on disk, which is useful when debugging a Vite
+build.
 
 ## License
 
-MIT. PocketOne and PocketBase are MIT; see their repositories for their notices.
+MIT © 2026 Ekilie. See [LICENSE](LICENSE).
+
+Built by [Ekilie](https://github.com/ekilie).
