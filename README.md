@@ -1,6 +1,6 @@
 # Ekilie Box
 
-### The backend-in-a-box, built by [Ekilie](https://github.com/ekilie).
+### The backend-in-a-box
 
 **One file. One command. A complete backend and admin console.**
 
