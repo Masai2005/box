@@ -3,7 +3,7 @@
 // This file is the composition root. It decides what the product is:
 //
 //   - app.New wires PocketOne/PocketBase, the config file and the optional static public directory;
-//   - extensions.Register adds the built-in extras (vacuum, dev mail trap);
+//   - extensions.Register adds the built-in extras (scheduled requests, vacuum, dev mail trap);
 //   - commands.Register adds `info` and `upgrade`;
 //   - Start registers the standard PocketOne extension set and runs the command tree.
 //

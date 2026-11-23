@@ -79,6 +79,7 @@ type CollectionsSearch = {
 
 const PER_PAGE = 30;
 const SYSTEM_COLUMNS = new Set(["id", "collectionId", "collectionName", "expand"]);
+const INTERNAL_COLLECTIONS = new Set(["_ekilie_scheduled_requests"]);
 
 export function CollectionsPage() {
   const search = useSearch({ strict: false }) as CollectionsSearch;
@@ -118,7 +119,12 @@ export function CollectionsPage() {
     [collections],
   );
   const systemCollections = useMemo(
-    () => collections.filter((collection) => collection.system || collection.name.startsWith("_")),
+    () =>
+      collections.filter(
+        (collection) =>
+          (collection.system || collection.name.startsWith("_")) &&
+          !INTERNAL_COLLECTIONS.has(collection.name),
+      ),
     [collections],
   );
 

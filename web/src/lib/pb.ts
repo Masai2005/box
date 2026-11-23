@@ -14,9 +14,19 @@ export function isSuperuser(): boolean {
 
 export function errorMessage(err: unknown): string {
   const e = err as any;
+  const data = e?.response?.data;
+  if (data && typeof data === "object" && !data.message) {
+    const fields = Object.entries(data)
+      .map(([field, value]: [string, any]) => {
+        const message = typeof value === "string" ? value : value?.message;
+        return message ? `${field}: ${message}` : "";
+      })
+      .filter(Boolean);
+    if (fields.length) return fields.join("\n");
+  }
   return (
     e?.response?.message ||
-    e?.response?.data?.message ||
+    data?.message ||
     e?.message ||
     "Something went wrong."
   );
