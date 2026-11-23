@@ -22,6 +22,11 @@ make build
 The stock PocketBase dashboard is not part of release builds (`-tags no_ui`). `/` is your console; `/api/...` is the
 backend.
 
+<p align="center">
+  <img src="docs/images/console-collections.png" alt="Ekilie Box superuser console — collections view" width="100%" />
+</p>
+
+
 ## Console
 
 - Login with the PocketBase `_superusers` account.
@@ -87,7 +92,10 @@ Then open `http://127.0.0.1:8090/` and sign in.
 ### Security
 
 Lock collection API rules to `null` (superuser-only) or set explicit rules. Superusers bypass API rules, so the
-console keeps working while anonymous requests are denied. File access rules follow the same rule.
+console keeps working while anonymous requests are denied.
+
+File downloads are public by default in PocketBase. To protect uploaded files, mark the file field as **Protected**
+in the collection editor. Protected downloads then require a file token or a matching view rule.
 
 ## Architecture
 
