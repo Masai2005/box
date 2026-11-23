@@ -107,7 +107,7 @@ That is the whole setup. Your data and uploads are created in `ekilie_box_data` 
 **To build from source:**
 
 - Go 1.27+
-- Node.js 20+ (only for the console)
+- Bun 1.4+ (only for the console)
 - No external database or services
 
 ## Configuration
@@ -194,8 +194,8 @@ make dev-ui
 go run -tags no_ui ./cmd/box serve
 ```
 
-The console's production build is committed so `go build` works on a machine without Node. `CGO_ENABLED=0` uses the
-pure-Go SQLite driver, producing a single statically linked executable.
+The console's production build is committed so `go build` works on a machine without Bun or Node. `CGO_ENABLED=0`
+uses the pure-Go SQLite driver, producing a single statically linked executable.
 
 ```bash
 make test     # Go tests

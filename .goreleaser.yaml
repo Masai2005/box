@@ -14,7 +14,7 @@ dist: .builds
 
 before:
   hooks:
-    - bash -c "cd web && npm ci --no-audit --no-fund && npm run build"
+    - bash -c "cd web && bun install --frozen-lockfile && bun run build"
 
 builds:
   - id: ekilie-box
