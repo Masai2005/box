@@ -344,7 +344,7 @@ function FieldInput({
             }
           }}
         >
-          {!multiple ? <option value="">—</option> : null}
+          {!multiple ? <option value="">None</option> : null}
           {(field.values || []).map((option) => (
             <option key={option} value={option}>
               {option}

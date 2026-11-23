@@ -124,7 +124,7 @@ export function SettingsTokensPage() {
         {created ? (
           <div className="border border-emerald-500/30 bg-emerald-500/10 p-4">
             <p className="font-mono text-[10px] font-bold uppercase tracking-[0.12em] text-emerald-700 dark:text-emerald-400">
-              Copy the new token now — it won&apos;t be shown again.
+              Copy the new token now. It won&apos;t be shown again.
             </p>
             <div className="mt-2 flex items-center gap-2">
               <code className="flex-1 break-all border border-border bg-background px-3 py-2 font-mono text-[11px]">

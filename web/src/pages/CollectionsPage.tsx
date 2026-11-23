@@ -595,7 +595,7 @@ function FieldValue({ value, type }: { value: any; type: string }) {
     return <Badge variant={value ? "success" : "outline"}>{value ? "true" : "false"}</Badge>;
   }
   if (value === null || value === undefined || value === "") {
-    return <span className="text-muted-foreground">—</span>;
+    return <span className="text-muted-foreground">-</span>;
   }
   if (type === "json") {
     return (

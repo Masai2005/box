@@ -421,7 +421,7 @@ export function CollectionDialog({
                           value={field.collectionId || ""}
                           onChange={(event) => updateField(index, { collectionId: event.target.value })}
                         >
-                          <option value="">—</option>
+                          <option value="">Select…</option>
                           {collections
                             .filter((item) => item.type !== "view")
                             .map((item) => (

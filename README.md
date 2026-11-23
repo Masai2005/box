@@ -5,13 +5,13 @@
 **One file. One command. A complete backend and admin console.**
 
 Ekilie Box gives you a database, user accounts, file storage, realtime updates, email, scheduled jobs, backups and a
-polished admin console — all in a single portable binary. No database server, no containers, no cloud account, no
+polished admin console, all in a single portable binary. No database server, no containers, no cloud account, no
 separate frontend to deploy.
 
 Download it, start it, and you have somewhere to build.
 
 <p align="center">
-  <img src="docs/images/console-collections.png" alt="Ekilie Box console — collections view" width="100%" />
+  <img src="docs/images/console-collections.png" alt="Ekilie Box console, collections view" width="100%" />
 </p>
 
 ## Why Ekilie Box
@@ -20,7 +20,7 @@ Download it, start it, and you have somewhere to build.
 - **Complete from day one.** Store data, manage accounts, upload files, push realtime updates, send email, run
   scheduled jobs and take backups without stitching together services.
 - **A console you will actually enjoy.** Create collections, edit records, browse files, inspect logs and change
-  settings visually. No SQL required — but it is there when you want it.
+  settings visually. No SQL required, but it is there when you want it.
 - **Private by design.** New collections start locked to your owner account. You decide what is public.
 - **Portable.** Your database and uploads live in one data folder. Move it, back it up, or run it from a USB drive.
 - **Yours.** Self-hosted, MIT licensed, no SaaS lock-in and no telemetry.
@@ -67,13 +67,13 @@ That is the whole setup. Your data and uploads are created in `ekilie_box_data` 
 
 ## Your first five minutes
 
-1. **Create a collection** — think of it as a table. In the console, open **Collections**, choose **New collection**
+1. **Create a collection:** think of it as a table. In the console, open **Collections**, choose **New collection**
    and add fields such as `title`, `body`, `published` or `cover`.
-2. **Add a record** — open the collection and create your first row. File fields accept uploads right in the console.
-3. **Try the API** — open **API explorer** to send requests against your new collection and copy the exact call for
+2. **Add a record:** open the collection and create your first row. File fields accept uploads right in the console.
+3. **Try the API:** open **API explorer** to send requests against your new collection and copy the exact call for
    your app.
-4. **Invite your app** — use the REST API from any language, or connect a web or mobile client to the realtime feed.
-5. **Make it yours** — change the app name, colours, mail settings and backups under **Settings**.
+4. **Invite your app:** use the REST API from any language, or connect a web or mobile client to the realtime feed.
+5. **Make it yours:** change the app name, colours, mail settings and backups under **Settings**.
 
 ## What is inside
 
@@ -165,9 +165,9 @@ Everything the console does is available over HTTP. Use it from a web app, mobil
 curl http://127.0.0.1:8090/api/health
 ```
 
-- `GET /api/health` — public health check. `X-Powered-By` reports the Ekilie Box version.
-- `GET /api/...` — records, authentication, files, realtime, settings and operational APIs.
-- `GET /` — the console.
+- `GET /api/health`: public health check. `X-Powered-By` reports the Ekilie Box version.
+- `GET /api/...`: records, authentication, files, realtime, settings and operational APIs.
+- `GET /`: the console.
 
 Sign in with your owner account to get an API token, then send it as `Authorization: <token>`. The console's **API
 explorer** shows working requests for every endpoint, with copy-ready cURL.

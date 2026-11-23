@@ -18,7 +18,7 @@ export function formatBytes(bytes: number | undefined | null, decimals = 1): str
 }
 
 export function formatDate(value?: string | Date | null): string {
-  if (!value) return "—";
+  if (!value) return "-";
   const date = value instanceof Date ? value : new Date(value);
   if (Number.isNaN(date.getTime())) return String(value);
   return date.toLocaleString(undefined, {
@@ -53,7 +53,7 @@ export function titleCase(value: string): string {
 }
 
 export function displayValue(value: unknown): string {
-  if (value === null || value === undefined || value === "") return "—";
+  if (value === null || value === undefined || value === "") return "-";
   if (typeof value === "boolean") return value ? "true" : "false";
   if (Array.isArray(value)) return value.join(", ");
   if (typeof value === "object") return JSON.stringify(value);

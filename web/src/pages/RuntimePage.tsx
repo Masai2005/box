@@ -103,7 +103,7 @@ export function RuntimePage() {
             <p>
               Multi-instance hosting, deploy pipelines, per-service environment groups, domains and rollbacks are
               provided by PocketOne&apos;s <code>pocker</code>, <code>multisite</code>, <code>deploy</code> and{" "}
-              <code>mothership</code> extensions. They need a control-plane UI and a host process — not a single-app
+              <code>mothership</code> extensions. They need a control-plane UI and a host process, not a single-app
               binary.
             </p>
             <div className="flex flex-wrap gap-2">

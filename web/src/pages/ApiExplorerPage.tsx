@@ -253,7 +253,7 @@ export function ApiExplorerPage() {
                           placeholder='{"title":"hello"}'
                         />
                         <p className="mt-1 text-[10px] text-muted-foreground">
-                          Fields: {selected?.fields?.filter((field) => !field.system).map((field) => field.name).join(", ") || "—"}
+                          Fields: {selected?.fields?.filter((field) => !field.system).map((field) => field.name).join(", ") || "-"}
                         </p>
                       </div>
                     ) : null}
