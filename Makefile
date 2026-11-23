@@ -37,6 +37,6 @@ clean:
 	rm -f $(BINARY) $(BINARY).exe
 	rm -rf .builds web/node_modules
 
-# Requires goreleaser, bun and the PocketOne checkout referenced by go.mod's replace directives.
+# Requires goreleaser, bun and either GITHUB_TOKEN in the environment or an authenticated gh CLI.
 release:
-	goreleaser release --clean
+	@GITHUB_TOKEN="$${GITHUB_TOKEN:-$$(gh auth token 2>/dev/null)}" goreleaser release --clean
