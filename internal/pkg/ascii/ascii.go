@@ -13,5 +13,5 @@ const EkilieBoxAscii = `
 
 // Print `EKILIE BOX` ascii to stdout/terminal
 func PrintAscii() {
-	fmt.Println(EkilieBoxAscii)
+	fmt.Print(EkilieBoxAscii)
 }
