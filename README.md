@@ -33,7 +33,7 @@ backend.
   collection export/import.
 - Bulk mail: campaigns and suppressions.
 - Ekilie Cloud design: warm paper, near-black ink, orange accent, dot grid, 2px rules, square corners, mono labels,
-  light/dark themes, responsive sidebar.
+  light/dark themes, responsive sidebar with an icon rail, tooltips and a Cmd/Ctrl+B toggle.
 
 Screens are single-superuser only; every API call uses `pb.collection("_superusers")` auth.
 

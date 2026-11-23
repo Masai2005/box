@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Link, Outlet, useRouterState } from "@tanstack/react-router";
 import {
   Archive,
@@ -14,8 +15,7 @@ import {
   LogOut,
   Mail,
   Menu,
-  PanelLeftClose,
-  PanelLeftOpen,
+  PanelLeft,
   ServerCog,
   Settings,
   Terminal,
@@ -48,11 +48,82 @@ const settings: NavItem[] = [
   { href: "/settings/import", label: "Import", icon: FileUp },
 ];
 
-const STORAGE_KEY = "ekilie-box-sidebar";
+// shadcn's sidebar cookie name, so the state feels like cloud-web.
+const COOKIE = "sidebar:state";
+const MAX_AGE = 60 * 60 * 24 * 7;
+
+function readSidebarOpen(): boolean {
+  const match = document.cookie.match(/(?:^|; )sidebar:state=([^;]+)/);
+  return match ? match[1] === "true" : true;
+}
+
+function writeSidebarOpen(open: boolean) {
+  document.cookie = `${COOKIE}=${open}; path=/; max-age=${MAX_AGE}; samesite=lax`;
+}
 
 function isActive(pathname: string, item: NavItem) {
   if (item.exact) return pathname === item.href;
   return pathname === item.href || pathname.startsWith(`${item.href}/`);
+}
+
+function SidebarTooltip({
+  label,
+  enabled,
+  children,
+}: {
+  label: string;
+  enabled: boolean;
+  children: React.ReactNode;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [position, setPosition] = useState<{ top: number; left: number } | null>(null);
+
+  function show() {
+    if (!enabled || !ref.current) return;
+    const rect = ref.current.getBoundingClientRect();
+    setPosition({ top: rect.top + rect.height / 2, left: rect.right + 10 });
+  }
+
+  function hide() {
+    setPosition(null);
+  }
+
+  useEffect(() => {
+    if (!position) return;
+    const clear = () => setPosition(null);
+    window.addEventListener("scroll", clear, true);
+    window.addEventListener("resize", clear);
+    return () => {
+      window.removeEventListener("scroll", clear, true);
+      window.removeEventListener("resize", clear);
+    };
+  }, [position]);
+
+  return (
+    <>
+      <div
+        ref={ref}
+        className="w-full"
+        onMouseEnter={show}
+        onMouseLeave={hide}
+        onFocusCapture={show}
+        onBlurCapture={hide}
+      >
+        {children}
+      </div>
+      {position
+        ? createPortal(
+            <div
+              style={{ top: position.top, left: position.left }}
+              className="pointer-events-none fixed z-[60] -translate-y-1/2 whitespace-nowrap border border-border bg-popover px-3 py-1.5 font-mono text-[9px] uppercase tracking-[0.12em] text-popover-foreground shadow-md animate-in fade-in-0 zoom-in-95"
+            >
+              {label}
+            </div>,
+            document.body,
+          )
+        : null}
+    </>
+  );
 }
 
 function NavLink({
@@ -69,21 +140,22 @@ function NavLink({
   const Icon = item.icon;
   const active = isActive(pathname, item);
   return (
-    <Link
-      to={item.href}
-      onClick={onNavigate}
-      title={collapsed ? item.label : undefined}
-      className={cn(
-        "flex items-center gap-3 py-2 font-mono text-[10px] uppercase tracking-[0.14em] transition-colors",
-        collapsed ? "justify-center px-0" : "px-3",
-        active
-          ? "bg-foreground text-background"
-          : "text-muted-foreground hover:bg-muted/50 hover:text-foreground",
-      )}
-    >
-      <Icon className="h-3.5 w-3.5 shrink-0" />
-      {collapsed ? null : <span className="truncate">{item.label}</span>}
-    </Link>
+    <SidebarTooltip label={item.label} enabled={Boolean(collapsed)}>
+      <Link
+        to={item.href}
+        onClick={onNavigate}
+        className={cn(
+          "flex items-center gap-3 py-2 font-mono text-[10px] uppercase tracking-[0.14em] transition-colors",
+          collapsed ? "justify-center px-0" : "px-3",
+          active
+            ? "bg-foreground text-background"
+            : "text-muted-foreground hover:bg-muted/50 hover:text-foreground",
+        )}
+      >
+        <Icon className="h-3.5 w-3.5 shrink-0" />
+        {collapsed ? null : <span className="truncate">{item.label}</span>}
+      </Link>
+    </SidebarTooltip>
   );
 }
 
@@ -105,37 +177,55 @@ function Brand({ collapsed }: { collapsed?: boolean }) {
   );
 }
 
+function SidebarRail({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => void }) {
+  return (
+    <button
+      type="button"
+      aria-label="Toggle Sidebar"
+      title="Toggle Sidebar"
+      tabIndex={-1}
+      onClick={onToggle}
+      className={cn(
+        "absolute inset-y-0 right-0 z-20 hidden w-4 translate-x-1/2 after:absolute after:inset-y-0 after:left-1/2 after:w-[2px] after:transition-colors hover:after:bg-border sm:block",
+        collapsed ? "cursor-e-resize" : "cursor-w-resize",
+      )}
+    />
+  );
+}
+
 function Sidebar({
   pathname,
   onNavigate,
   email,
   logout,
   collapsed,
+  onToggle,
 }: {
   pathname: string;
   onNavigate?: () => void;
   email?: string;
   logout: () => void;
   collapsed?: boolean;
+  onToggle?: () => void;
 }) {
   return (
     <aside
       className={cn(
-        "flex h-full shrink-0 flex-col border-r-2 border-foreground bg-card transition-[width] duration-200",
-        collapsed ? "w-[72px]" : "w-64",
+        "relative flex h-full shrink-0 flex-col border-r-2 border-foreground bg-card transition-[width] duration-200 ease-linear",
+        collapsed ? "w-12" : "w-64",
       )}
     >
       <div
         className={cn(
           "flex h-14 shrink-0 items-center border-b-2 border-foreground bg-background/90 backdrop-blur-md",
-          collapsed ? "justify-center px-2" : "px-4",
+          collapsed ? "justify-center px-0" : "px-4",
         )}
       >
         <Brand collapsed={collapsed} />
       </div>
 
       <nav className="flex-1 overflow-y-auto py-3 scrollbar-thin">
-        <div className={cn("space-y-0.5", collapsed ? "px-2" : "px-2")}>
+        <div className={cn("space-y-0.5", collapsed ? "px-1" : "px-2")}>
           {primary.map((item) => (
             <NavLink
               key={item.href}
@@ -148,7 +238,7 @@ function Sidebar({
         </div>
 
         {collapsed ? (
-          <div className="mx-2 mt-3 space-y-0.5 border-t border-border pt-3">
+          <div className="mx-1 mt-3 space-y-0.5 border-t border-border pt-3">
             {settings.map((item) => (
               <NavLink
                 key={item.href}
@@ -179,40 +269,42 @@ function Sidebar({
           </details>
         )}
 
-        <div className={cn("mt-4 border-t border-border pt-3", collapsed ? "mx-2" : "px-2")}>
-          <a
-            href="https://ekilie.cloud/docs"
-            target="_blank"
-            rel="noopener noreferrer"
-            title={collapsed ? "Docs" : undefined}
-            className={cn(
-              "flex items-center gap-3 py-2 font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground",
-              collapsed ? "justify-center px-0" : "px-3",
-            )}
-          >
-            <Braces className="h-3.5 w-3.5 shrink-0" />
-            {collapsed ? null : <span>Docs</span>}
-          </a>
+        <div className={cn("mt-4 border-t border-border pt-3", collapsed ? "mx-1" : "px-2")}>
+          <SidebarTooltip label="Docs" enabled={Boolean(collapsed)}>
+            <a
+              href="https://ekilie.cloud/docs"
+              target="_blank"
+              rel="noopener noreferrer"
+              className={cn(
+                "flex items-center gap-3 py-2 font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground",
+                collapsed ? "justify-center px-0" : "px-3",
+              )}
+            >
+              <Braces className="h-3.5 w-3.5 shrink-0" />
+              {collapsed ? null : <span>Docs</span>}
+            </a>
+          </SidebarTooltip>
         </div>
       </nav>
 
-      <div className="border-t-2 border-foreground bg-muted/20 p-3">
+      <div className={cn("border-t-2 border-foreground bg-muted/20", collapsed ? "p-1.5" : "p-3")}>
         {collapsed ? (
-          <div className="flex flex-col items-center gap-2">
-            <div className="flex h-7 w-7 items-center justify-center bg-foreground">
-              <span className="font-mono text-[9px] font-bold text-background">
+          <div className="flex flex-col items-center gap-1.5">
+            <div className="flex h-6 w-6 items-center justify-center bg-foreground">
+              <span className="font-mono text-[8px] font-bold text-background">
                 {(email || "SU").slice(0, 2).toUpperCase()}
               </span>
             </div>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="text-muted-foreground hover:text-destructive"
-              onClick={logout}
-              title="Sign out"
-            >
-              <LogOut />
-            </Button>
+            <SidebarTooltip label="Sign out" enabled>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                onClick={logout}
+              >
+                <LogOut className="h-3.5 w-3.5" />
+              </Button>
+            </SidebarTooltip>
           </div>
         ) : (
           <>
@@ -239,6 +331,10 @@ function Sidebar({
           </>
         )}
       </div>
+
+      {onToggle && collapsed !== undefined ? (
+        <SidebarRail collapsed={collapsed} onToggle={onToggle} />
+      ) : null}
     </aside>
   );
 }
@@ -246,12 +342,10 @@ function Sidebar({
 function Topbar({
   pathname,
   onMenu,
-  collapsed,
   onToggle,
 }: {
   pathname: string;
   onMenu: () => void;
-  collapsed: boolean;
   onToggle: () => void;
 }) {
   const crumbs = pathname.split("/").filter(Boolean);
@@ -261,21 +355,21 @@ function Topbar({
         <Button
           variant="ghost"
           size="icon"
-          className="lg:hidden"
+          className="h-7 w-7 lg:hidden"
           onClick={onMenu}
-          aria-label="Open menu"
+          aria-label="Toggle Sidebar"
         >
-          <Menu />
+          <Menu className="h-3.5 w-3.5" />
         </Button>
         <Button
           variant="ghost"
           size="icon"
-          className="hidden lg:flex"
+          className="hidden h-7 w-7 lg:flex"
           onClick={onToggle}
-          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-          title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          aria-label="Toggle Sidebar"
+          title="Toggle Sidebar"
         >
-          {collapsed ? <PanelLeftOpen /> : <PanelLeftClose />}
+          <PanelLeft className="h-3.5 w-3.5" />
         </Button>
         <div className="hidden items-center gap-2 font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground sm:flex">
           <Link to="/" className="hover:text-foreground">
@@ -309,18 +403,28 @@ export function AppShell() {
   const { superuser, logout } = useAuth();
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [collapsed, setCollapsed] = useState(
-    () => localStorage.getItem(STORAGE_KEY) === "collapsed",
-  );
+  const [open, setOpen] = useState(readSidebarOpen);
   const email = String(superuser?.email || "");
+  const collapsed = !open;
 
-  function toggleCollapsed() {
-    setCollapsed((current) => {
+  function toggleSidebar() {
+    setOpen((current) => {
       const next = !current;
-      localStorage.setItem(STORAGE_KEY, next ? "collapsed" : "expanded");
+      writeSidebarOpen(next);
       return next;
     });
   }
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key.toLowerCase() === "b" && (event.metaKey || event.ctrlKey)) {
+        event.preventDefault();
+        toggleSidebar();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
 
   return (
     <div className="flex h-screen w-full overflow-hidden bg-background text-foreground">
@@ -330,6 +434,7 @@ export function AppShell() {
           email={email}
           logout={logout}
           collapsed={collapsed}
+          onToggle={toggleSidebar}
         />
       </div>
 
@@ -360,8 +465,7 @@ export function AppShell() {
         <Topbar
           pathname={pathname}
           onMenu={() => setMobileOpen(true)}
-          collapsed={collapsed}
-          onToggle={toggleCollapsed}
+          onToggle={toggleSidebar}
         />
         <main className="dot-grid-bg flex-1">
           <Outlet />
