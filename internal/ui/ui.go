@@ -1,6 +1,6 @@
 // Package ui embeds the Ekilie Box superuser UI (the built Vite app).
 //
-// The UI is served at / by internal/app. Build it into dist with `make ui` (or `cd web && npm run build`).
+// The UI is served at / by internal/app. Build it into dist with `make ui` (or `cd web && bun run build`).
 package ui
 
 import (

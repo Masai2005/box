@@ -47,4 +47,3 @@ go.work.sum
 # UI dependencies
 web/node_modules/
 web/.vite/
-web/package-lock.json.bak

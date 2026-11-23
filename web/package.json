@@ -1,6 +1,11 @@
 {
   "name": "ekilie-box-ui",
   "private": true,
+  "packageManager": "bun@1.4.4",
+  "trustedDependencies": [
+    "@swc/core",
+    "esbuild"
+  ],
   "version": "0.1.0",
   "type": "module",
   "scripts": {

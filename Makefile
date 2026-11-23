@@ -11,11 +11,11 @@ all: build
 
 # Build the superuser UI into internal/ui/dist, which is embedded in the binary.
 ui:
-	cd web && npm install --no-audit --no-fund && npm run build
+	cd web && bun install --frozen-lockfile && bun run build
 
 # Vite dev server with /api and /_ proxied to the running Go process.
 dev-ui:
-	cd web && npm run dev
+	cd web && bun run dev
 
 build: ui
 	CGO_ENABLED=0 go build -tags no_ui -trimpath -ldflags "$(LDFLAGS)" -o $(BINARY) ./cmd/box
@@ -37,6 +37,6 @@ clean:
 	rm -f $(BINARY) $(BINARY).exe
 	rm -rf .builds web/node_modules
 
-# Requires goreleaser, npm and the PocketOne checkout referenced by go.mod's replace directives.
+# Requires goreleaser, bun and the PocketOne checkout referenced by go.mod's replace directives.
 release:
 	goreleaser release --clean
