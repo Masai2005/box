@@ -3,9 +3,10 @@ VERSION ?= $(patsubst v%,%,$(shell git describe --tags --always --dirty 2>/dev/n
 
 LDFLAGS := -s -w -X github.com/ekilie/box/internal/app.Version=$(VERSION)
 
-.PHONY: all ui build run dev-ui test tidy clean release update-pocketone
+.PHONY: all ui build run dev-ui test tidy clean tag release update-pocketone
 
 REF ?= main
+BUMP ?= patch
 
 all: build
 
@@ -37,6 +38,55 @@ clean:
 	rm -f $(BINARY) $(BINARY).exe
 	rm -rf .builds web/node_modules
 
+# Create and push a semantic version tag for HEAD.
+#   make tag                  bump the patch version
+#   make tag BUMP=minor       bump the minor version
+#   make tag BUMP=major       bump the major version
+#   make tag VERSION=1.2.3    use an explicit version
+tag:
+	@set -eu; \
+	if [ -n "$$(git status --porcelain)" ]; then \
+		echo "working tree is dirty; commit or stash changes before tagging" >&2; \
+		exit 1; \
+	fi; \
+	if [ -n "$(VERSION)" ] && [ "$(origin VERSION)" != "file" ]; then \
+		tag="v$${VERSION#v}"; \
+	else \
+		head_tag=$$(git tag --points-at HEAD --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-version:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$$' | head -n 1 || true); \
+		if [ -n "$$head_tag" ]; then \
+			tag="$$head_tag"; \
+		else \
+			latest=$$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-version:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$$' | head -n 1 || true); \
+			if [ -z "$$latest" ]; then \
+				tag="v0.1.0"; \
+			else \
+				base=$${latest#v}; \
+				major=$${base%%.*}; \
+				rest=$${base#*.}; \
+				minor=$${rest%%.*}; \
+				patch=$${rest#*.}; \
+				case "$(BUMP)" in \
+					major) major=$$((major + 1)); minor=0; patch=0 ;; \
+					minor) minor=$$((minor + 1)); patch=0 ;; \
+					patch) patch=$$((patch + 1)) ;; \
+					*) echo "BUMP must be major, minor, or patch" >&2; exit 1 ;; \
+				esac; \
+				tag="v$$major.$$minor.$$patch"; \
+			fi; \
+		fi; \
+	fi; \
+	if ! printf '%s' "$$tag" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$$'; then \
+		echo "invalid version: $$tag (expected vMAJOR.MINOR.PATCH)" >&2; \
+		exit 1; \
+	fi; \
+	if git rev-parse -q --verify "refs/tags/$$tag" >/dev/null; then \
+		echo "tag $$tag already exists"; \
+	else \
+		git tag -a "$$tag" -m "$$tag"; \
+	fi; \
+	git push origin "$$tag"; \
+	echo "tagged $$tag"
+
 # Requires goreleaser, bun and either GITHUB_TOKEN in the environment or an authenticated gh CLI.
-release:
+release: tag
 	@GITHUB_TOKEN="$${GITHUB_TOKEN:-$$(gh auth token 2>/dev/null)}" goreleaser release --clean
