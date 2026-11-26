@@ -30,8 +30,9 @@ test:
 
 # Create or update the local test superuser. Keep the password out of git:
 #   make test-superuser TEST_SUPERUSER_PASSWORD='your-password'
+#   make test-superuser TEST_SUPERUSER_EMAIL=you@example.com TEST_SUPERUSER_PASSWORD='your-password'
 # Changing the password rotates the account token key, so sign in again in open browser sessions.
-TEST_SUPERUSER_EMAIL ?= tacherasasi@gmail.com
+TEST_SUPERUSER_EMAIL ?= test@example.com
 TEST_SUPERUSER_PASSWORD ?=
 test-superuser:
 	@test -n "$(TEST_SUPERUSER_PASSWORD)" || { \
