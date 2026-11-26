@@ -10,7 +10,7 @@ import {
   CardDescription,
   CardHeader,
   CardTitle,
-  Dialog,
+  Sheet,
   EmptyState,
   Input,
   Label,
@@ -410,7 +410,7 @@ function CampaignDialog({
   }
 
   return (
-    <Dialog
+    <Sheet
       open={Boolean(campaign)}
       onClose={onClose}
       title={campaign.name}
@@ -491,6 +491,6 @@ function CampaignDialog({
           Sending uses the app&apos;s SMTP settings. Test and preview from the bulk-mail contract if needed.
         </div>
       </div>
-    </Dialog>
+    </Sheet>
   );
 }

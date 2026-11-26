@@ -10,7 +10,7 @@ import {
   CardDescription,
   CardHeader,
   CardTitle,
-  Dialog,
+  Sheet,
   EmptyState,
   Input,
   Label,
@@ -570,7 +570,7 @@ export function SettingsCronsPage() {
         </Card>
       </PageBody>
 
-      <Dialog
+      <Sheet
         open={dialogOpen}
         onClose={closeDialog}
         title={editing ? `Edit ${editing.name}` : "New scheduled request"}
@@ -713,7 +713,7 @@ export function SettingsCronsPage() {
             Enabled
           </label>
         </form>
-      </Dialog>
+      </Sheet>
     </>
   );
 }

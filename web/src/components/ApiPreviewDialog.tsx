@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { Copy } from "lucide-react";
 import { toast } from "sonner";
-import { Button, Dialog, Tabs } from "@/components/ui";
+import { Button, Sheet, Tabs } from "@/components/ui";
 import { pb } from "@/lib/pb";
 
 type Field = { name: string; type: string; system?: boolean };
@@ -92,7 +92,7 @@ export function ApiPreviewDialog({
   }`;
 
   return (
-    <Dialog
+    <Sheet
       open={open}
       onClose={onClose}
       title={`API preview · ${collection.name}`}
@@ -111,7 +111,7 @@ export function ApiPreviewDialog({
           {" "}or an API token from Settings → API tokens.
         </div>
       </div>
-    </Dialog>
+    </Sheet>
   );
 }
 
