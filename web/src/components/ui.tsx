@@ -350,7 +350,10 @@ export function Sheet({
   if (!open) return null;
 
   return createPortal(
-    <div className="fixed inset-0 z-50 flex justify-end bg-black/50" onMouseDown={onClose}>
+    <div
+      className="fixed inset-0 z-50 flex justify-end bg-black/50 animate-in fade-in-0 duration-200"
+      onMouseDown={onClose}
+    >
       <div
         ref={panelRef}
         role="dialog"
@@ -360,6 +363,7 @@ export function Sheet({
         tabIndex={-1}
         className={cn(
           "flex h-full w-full max-w-2xl flex-col border-l-2 border-foreground bg-card text-card-foreground shadow-2xl focus:outline-none",
+          "animate-in slide-in-from-right duration-300 [animation-timing-function:cubic-bezier(0.16,1,0.3,1)]",
           className,
         )}
         onMouseDown={(event) => event.stopPropagation()}

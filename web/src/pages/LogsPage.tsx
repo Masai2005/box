@@ -7,7 +7,7 @@ import {
   Button,
   Card,
   CardContent,
-  Dialog,
+  Sheet,
   EmptyState,
   Input,
   Label,
@@ -395,7 +395,7 @@ export function LogsPage() {
         </div>
       </PageBody>
 
-      <Dialog
+      <Sheet
         open={Boolean(preview)}
         onClose={() => setPreview(null)}
         title="Log entry"
@@ -438,9 +438,9 @@ export function LogsPage() {
             </pre>
           </div>
         ) : null}
-      </Dialog>
+      </Sheet>
 
-      <Dialog
+      <Sheet
         open={settingsOpen}
         onClose={() => setSettingsOpen(false)}
         title="Log settings"
@@ -470,7 +470,7 @@ export function LogsPage() {
           />
           <p className="mt-2 text-xs text-muted-foreground">0 keeps logs forever.</p>
         </div>
-      </Dialog>
+      </Sheet>
     </>
   );
 }

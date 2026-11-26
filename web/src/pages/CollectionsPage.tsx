@@ -24,7 +24,7 @@ import {
   Button,
   Card,
   CardContent,
-  Dialog,
+  Sheet,
   EmptyState,
   Input,
   Select,
@@ -870,9 +870,10 @@ export function CollectionsPage() {
 
       <ApiPreviewDialog open={apiOpen} onClose={() => setApiOpen(false)} collection={selected} />
 
-      <Dialog
+      <Sheet
         open={columnsOpen}
         onClose={() => setColumnsOpen(false)}
+        className="max-w-md"
         title="Columns"
         description="Choose which fields appear in the records table."
         footer={
@@ -919,7 +920,7 @@ export function CollectionsPage() {
             <p className="text-xs text-muted-foreground">This collection has no data columns.</p>
           ) : null}
         </div>
-      </Dialog>
+      </Sheet>
     </>
   );
 }

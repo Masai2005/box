@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
-import { Button, Dialog, Input, Label, Select, Tabs, Textarea } from "@/components/ui";
+import { Button, Sheet, Input, Label, Select, Tabs, Textarea } from "@/components/ui";
 import { pb, errorMessage, type Json } from "@/lib/pb";
 import { discardChanges, useUnsavedChanges } from "@/lib/useUnsavedChanges";
 
@@ -511,7 +511,7 @@ export function CollectionDialog({
   }
 
   return (
-    <Dialog
+    <Sheet
       open={open}
       onClose={close}
       title={isEdit ? `Edit ${collection?.name}` : "New collection"}
@@ -1092,7 +1092,7 @@ export function CollectionDialog({
           </div>
         ) : null}
       </form>
-    </Dialog>
+    </Sheet>
   );
 }
 
