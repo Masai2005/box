@@ -1,7 +1,14 @@
-import PocketBase from "pocketbase";
+import PocketBase, { LocalAuthStore } from "pocketbase";
 
 // Same origin in production. In dev, Vite proxies /api and /_ to the Go process.
-export const pb = new PocketBase(window.location.origin);
+// Keep our session separate from any other PocketBase app on the same origin.
+if (typeof window !== "undefined") {
+  window.localStorage.removeItem("pocketbase_auth");
+}
+export const pb = new PocketBase(
+  window.location.origin,
+  new LocalAuthStore("ekiliebox_auth"),
+);
 
 // The UI drives one superuser session; don't auto-cancel requests when filters change.
 pb.autoCancellation(false);

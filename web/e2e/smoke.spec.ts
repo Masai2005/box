@@ -4,6 +4,12 @@ import { createCollection, login } from "./helpers";
 test("login and command palette", async ({ page }) => {
   await login(page);
   await expect(page.getByRole("heading", { name: "Overview" })).toBeVisible();
+  const authKeys = await page.evaluate(() => ({
+    current: localStorage.getItem("ekiliebox_auth"),
+    legacy: localStorage.getItem("pocketbase_auth"),
+  }));
+  expect(authKeys.current).toBeTruthy();
+  expect(authKeys.legacy).toBeNull();
 
   await page.keyboard.press("Control+k");
   const search = page.getByRole("textbox", { name: "Search pages, collections, actions and records" });
