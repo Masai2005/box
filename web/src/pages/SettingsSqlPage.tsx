@@ -21,6 +21,7 @@ import {
   Textarea,
 } from "@/components/ui";
 import { pb, errorMessage } from "@/lib/pb";
+import { toCsv } from "@/lib/csv";
 
 type Result = {
   columns?: { name: string }[];
@@ -99,9 +100,7 @@ export function SettingsSqlPage() {
   function exportCsv() {
     if (!result?.columns?.length || !result.rows?.length) return;
     const rows = [result.columns.map((column) => column.name), ...result.rows];
-    const csv = rows
-      .map((row) => row.map((value) => `"${String(value ?? "").replaceAll('"', '""')}"`).join(","))
-      .join("\n");
+    const csv = toCsv(rows);
     const blob = new Blob([csv], { type: "text/csv" });
     const link = document.createElement("a");
     link.href = URL.createObjectURL(blob);
