@@ -14,16 +14,7 @@
       href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
-    <script>
-      try {
-        const stored = localStorage.getItem("ekilie-box-theme");
-        if (stored === "dark") document.documentElement.classList.add("dark");
-        if (stored === "light") document.documentElement.classList.remove("dark");
-        if (!stored && window.matchMedia("(prefers-color-scheme: dark)").matches) {
-          document.documentElement.classList.add("dark");
-        }
-      } catch (_) {}
-    </script>
+    <script src="/theme.js"></script>
   </head>
   <body>
     <div id="root"></div>
