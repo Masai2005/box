@@ -3,7 +3,7 @@ VERSION ?= $(patsubst v%,%,$(shell git describe --tags --always --dirty 2>/dev/n
 
 LDFLAGS := -s -w -X github.com/ekilie/box/internal/app.Version=$(VERSION)
 
-.PHONY: all ui build run dev-ui test tidy clean tag release update-pocketone
+.PHONY: all ui build run dev-ui test test-superuser tidy clean tag release update-pocketone
 
 REF ?= main
 BUMP ?= patch
@@ -27,6 +27,17 @@ run: ui
 test:
 	@test -d internal/ui/dist || $(MAKE) ui
 	go test ./...
+
+# Create or update the local test superuser. Keep the password out of git:
+#   make test-superuser TEST_SUPERUSER_PASSWORD='your-password'
+TEST_SUPERUSER_EMAIL ?= tacherasasi@gmail.com
+TEST_SUPERUSER_PASSWORD ?=
+test-superuser:
+	@test -n "$(TEST_SUPERUSER_PASSWORD)" || { \
+		echo "Set TEST_SUPERUSER_PASSWORD, e.g. make test-superuser TEST_SUPERUSER_PASSWORD='...'"; \
+		exit 1; \
+	}
+	go run -tags no_ui ./cmd/box superuser upsert "$(TEST_SUPERUSER_EMAIL)" "$(TEST_SUPERUSER_PASSWORD)"
 
 tidy:
 	go mod tidy
