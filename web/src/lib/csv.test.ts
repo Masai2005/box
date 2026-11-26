@@ -5,7 +5,7 @@ describe("csvCell", () => {
   test("neutralises spreadsheet formula triggers in strings", () => {
     expect(csvCell("=1+1")).toBe(`"'=1+1"`);
     expect(csvCell("@SUM(A1)")).toBe(`"'@SUM(A1)"`);
-    expect(csvCell("+1")).toBe(`"'+1"`);
+    expect(csvCell("+1+1")).toBe(`"'+1+1"`);
     expect(csvCell("-cmd")).toBe(`"'-cmd"`);
     expect(csvCell("\t=1")).toBe(`"'\t=1"`);
     expect(csvCell("\r=1")).toBe(`"'\r=1"`);
@@ -14,6 +14,16 @@ describe("csvCell", () => {
   test("escapes quotes after neutralising", () => {
     expect(csvCell('=HYPERLINK("x")')).toBe(`"'=HYPERLINK(""x"")"`);
     expect(csvCell('say "hi"')).toBe(`"say ""hi"""`);
+  });
+
+  test("keeps signed numbers numeric (the SQL API returns every value as a string)", () => {
+    expect(csvCell("-5")).toBe(`"-5"`);
+    expect(csvCell("+3")).toBe(`"+3"`);
+    expect(csvCell("-1.25")).toBe(`"-1.25"`);
+    expect(csvCell("-1.2e3")).toBe(`"-1.2e3"`);
+    expect(csvCell("-.5")).toBe(`"-.5"`);
+    expect(csvCell("-1+1")).toBe(`"'-1+1"`);
+    expect(csvCell("-")).toBe(`"'-"`);
   });
 
   test("leaves plain text and non-string values unchanged", () => {
