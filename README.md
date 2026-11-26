@@ -274,6 +274,8 @@ explorer** shows working requests for every endpoint, with copy-ready cURL.
 - New collections are locked to the owner account. Open access deliberately with API rules.
 - The owner account bypasses collection rules, so the console always works while anonymous requests are denied.
 - Mark file fields as **Protected** to require signed access. Otherwise uploaded files are served publicly.
+- The embedded console is served with a strict Content-Security-Policy (`script-src 'self'`, `frame-ancestors 'none'`).
+  A `--publicDir` site is yours and keeps its own headers.
 - Use HTTPS and a reverse proxy when exposing Ekilie Box to the internet.
 - Keep `ekiliebox.yaml`, `.env` and the data folder out of version control.
 

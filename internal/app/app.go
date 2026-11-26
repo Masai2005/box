@@ -290,24 +290,46 @@ func (a *App) bindBase() {
 						fsys = os.DirFS(a.PublicDir)
 					}
 				}
-				if fsys == nil {
+				embedded := fsys == nil
+				if embedded {
 					fsys = ui.FS()
 				}
 
-				static := apis.Static(fsys, a.IndexFallback)
-				se.Router.GET("/{path...}", func(re *core.RequestEvent) error {
-					p := re.Request.URL.Path
-					// never let the SPA swallow unknown API or stock dashboard paths
-					if strings.HasPrefix(p, "/api/") || strings.HasPrefix(p, "/_/") {
-						return re.NotFoundError("", nil)
-					}
-					return static(re)
-				})
+				se.Router.GET("/{path...}", consoleHandler(apis.Static(fsys, a.IndexFallback), embedded))
 			}
 
 			return se.Next()
 		},
 	})
+}
+
+// consoleCSP locks the superuser console to its own origin, like PocketOne's stock dashboard at /_/. The console keeps
+// the superuser token in localStorage, so injected script must not run. Google Fonts serves the console's monospace
+// font; inline styles are allowed because the React components set style attributes.
+const consoleCSP = "default-src 'self'; " +
+	"script-src 'self'; " +
+	"style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " +
+	"font-src 'self' https://fonts.gstatic.com; " +
+	"img-src 'self' data: blob:; " +
+	"connect-src 'self'; " +
+	"object-src 'none'; " +
+	"base-uri 'self'; " +
+	"form-action 'self'; " +
+	"frame-ancestors 'none'"
+
+// consoleHandler serves the SPA at /. API and stock dashboard paths are never swallowed by the SPA. Only the embedded
+// console gets consoleCSP: a --publicDir site is the user's own and keeps its own headers.
+func consoleHandler(static func(*core.RequestEvent) error, embedded bool) func(*core.RequestEvent) error {
+	return func(re *core.RequestEvent) error {
+		p := re.Request.URL.Path
+		if strings.HasPrefix(p, "/api/") || strings.HasPrefix(p, "/_/") {
+			return re.NotFoundError("", nil)
+		}
+		if embedded {
+			re.Response.Header().Set("Content-Security-Policy", consoleCSP)
+		}
+		return static(re)
+	}
 }
 
 // defaultPublicDir is ekilie_box_public next to the executable (or the working directory for go run).
