@@ -74,6 +74,28 @@ export function SettingsImportPage() {
     return { added, changed, same, removed };
   }, [current, imported]);
 
+  const fieldDiffs = useMemo(() => {
+    if (!imported) return [];
+    const byName = new Map(current.map((collection) => [collection.name, collection]));
+    return imported
+      .map((collection) => {
+        const existing = byName.get(collection.name);
+        if (!existing) return null;
+        const oldFields = new Map((existing.fields || []).map((field: any) => [field.name, field]));
+        const newFields = new Map((collection.fields || []).map((field: any) => [field.name, field]));
+        const added = [...newFields.keys()].filter((name) => !oldFields.has(name));
+        const removed = [...oldFields.keys()].filter((name) => !newFields.has(name));
+        const changed = [...newFields.keys()].filter((name) => {
+          const oldField = oldFields.get(name);
+          const newField = newFields.get(name);
+          return oldField && newField && JSON.stringify(oldField) !== JSON.stringify(newField);
+        });
+        if (!added.length && !removed.length && !changed.length) return null;
+        return { name: collection.name, added, removed, changed };
+      })
+      .filter(Boolean);
+  }, [current, imported]);
+
   async function apply() {
     if (!imported) return;
     if (
@@ -146,11 +168,44 @@ export function SettingsImportPage() {
                 {busy ? "Importing…" : "Import"}
               </Button>
             </CardHeader>
-            <CardContent className="grid gap-3 sm:grid-cols-4">
-              <Stat label="Added" value={diff.added.length} variant="success" names={diff.added} />
-              <Stat label="Changed" value={diff.changed.length} variant="warning" names={diff.changed} />
-              <Stat label="Unchanged" value={diff.same.length} variant="outline" names={diff.same} />
-              <Stat label="Removed" value={deleteMissing ? diff.removed.length : 0} variant="danger" names={deleteMissing ? diff.removed : []} />
+            <CardContent className="space-y-4">
+              <div className="grid gap-3 sm:grid-cols-4">
+                <Stat label="Added" value={diff.added.length} variant="success" names={diff.added} />
+                <Stat label="Changed" value={diff.changed.length} variant="warning" names={diff.changed} />
+                <Stat label="Unchanged" value={diff.same.length} variant="outline" names={diff.same} />
+                <Stat label="Removed" value={deleteMissing ? diff.removed.length : 0} variant="danger" names={deleteMissing ? diff.removed : []} />
+              </div>
+
+              {fieldDiffs.length ? (
+                <div className="overflow-auto border border-border">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-muted/30 font-mono text-[9px] uppercase tracking-[0.12em] text-muted-foreground">
+                      <tr>
+                        <th className="px-3 py-2">Collection</th>
+                        <th className="px-3 py-2">Added fields</th>
+                        <th className="px-3 py-2">Changed fields</th>
+                        <th className="px-3 py-2">Removed fields</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {fieldDiffs.map((entry: any) => (
+                        <tr key={entry.name} className="border-t border-border">
+                          <td className="px-3 py-2 font-mono text-[10px]">{entry.name}</td>
+                          <td className="px-3 py-2 font-mono text-[10px] text-emerald-600">
+                            {entry.added.join(", ") || "-"}
+                          </td>
+                          <td className="px-3 py-2 font-mono text-[10px] text-amber-600">
+                            {entry.changed.join(", ") || "-"}
+                          </td>
+                          <td className="px-3 py-2 font-mono text-[10px] text-destructive">
+                            {entry.removed.join(", ") || "-"}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : null}
             </CardContent>
           </Card>
         ) : (

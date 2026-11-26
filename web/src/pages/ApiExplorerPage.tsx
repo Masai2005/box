@@ -55,6 +55,7 @@ export function ApiExplorerPage() {
   const [result, setResult] = useState<{ status: number; ms: number; error?: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [snippet, setSnippet] = useState("curl");
 
   useEffect(() => {
     pb.collections
@@ -140,14 +141,32 @@ export function ApiExplorerPage() {
     }
   }
 
-  const curl = useMemo(() => {
+  const snippets = useMemo(() => {
     const path = request.query ? `${request.path}?${request.query}` : request.path;
     const url = `${window.location.origin}${path}`;
-    const bodyPart = ["POST", "PATCH", "PUT"].includes(request.method)
+    const hasBody = ["POST", "PATCH", "PUT"].includes(request.method);
+    const bodyPart = hasBody
       ? ` \\\n  -H "Content-Type: application/json" \\\n  -d '${body}'`
       : "";
-    return `curl -X ${request.method} "${url}" \\\n  -H "Authorization: $TOKEN"${bodyPart}`;
+    const curl = `curl -X ${request.method} "${url}" \\\n  -H "Authorization: $TOKEN"${bodyPart}`;
+    const js = `const response = await fetch(${JSON.stringify(url)}, {
+  method: ${JSON.stringify(request.method)},
+  headers: {
+    Authorization: pb.authStore.token,${hasBody ? "\n    \"Content-Type\": \"application/json\"," : ""}
+  },${hasBody ? `\n  body: JSON.stringify(${body || "{}"}),` : ""}
+});
+const data = await response.json();`;
+    const dart = `final request = http.Request(
+  ${JSON.stringify(request.method)},
+  Uri.parse(${JSON.stringify(url)}),
+)..headers["Authorization"] = token;${hasBody ? `\nrequest.headers["Content-Type"] = "application/json";\nrequest.body = jsonEncode(${body || "{}"});` : ""}
+
+final response = await request.send();
+final data = await response.stream.bytesToString();`;
+    return { curl, js, dart };
   }, [request, body]);
+
+  const activeSnippet = snippets[snippet as keyof typeof snippets] || snippets.curl;
 
   return (
     <>
@@ -277,13 +296,22 @@ export function ApiExplorerPage() {
             </Card>
 
             <Card>
-              <CardHeader className="flex items-center justify-between">
-                <CardTitle>cURL</CardTitle>
+              <CardHeader className="flex flex-wrap items-center justify-between gap-3">
+                <Tabs
+                  tabs={[
+                    { value: "curl", label: "cURL" },
+                    { value: "js", label: "JavaScript" },
+                    { value: "dart", label: "Dart" },
+                  ]}
+                  value={snippet}
+                  onChange={setSnippet}
+                  className="border-b-0"
+                />
                 <Button
                   variant="ghost"
                   size="sm"
                   onClick={() => {
-                    navigator.clipboard.writeText(curl);
+                    navigator.clipboard.writeText(activeSnippet);
                     toast.success("Copied.");
                   }}
                 >
@@ -293,7 +321,7 @@ export function ApiExplorerPage() {
               </CardHeader>
               <CardContent>
                 <pre className="overflow-x-auto border border-border bg-background p-4 font-mono text-[11px] scrollbar-thin">
-                  {curl}
+                  {activeSnippet}
                 </pre>
               </CardContent>
             </Card>

@@ -80,11 +80,14 @@ That is the whole setup. Your data and uploads are created in `ekilie_box_data` 
 ### Console
 
 - Dashboard with instance health, database size, collections, users, backups, cron jobs and recent errors.
-- Collection and record management with filters, sorting, pagination, relations and file uploads.
+- Collection and record management with filters, sorting, pagination, relations, inline create, JSON validation and file uploads.
+- Collection editor with schema diffs, full field options, OAuth2 providers, index suggestions and view-query preview.
 - URL-addressable record editor, so you can link directly to a row.
 - Command palette (`Cmd/Ctrl+K`), collapsible icon sidebar (`Cmd/Ctrl+B`), light and dark themes.
-- Logs with filters, volume charts and a live tail.
-- API explorer, schema view and realtime inspector.
+- Logs with saved filters, request detail, volume charts and a live tail.
+- Storage usage, file replace/delete, import diffs and backup schedule controls.
+- API explorer, generated API docs, schema relation graph and realtime inspector.
+- Observability, status, audit, auth and migration views.
 - SQL console with schema browsing, saved queries and CSV export.
 - Application, mail, storage, backup, cron, token, import and export settings.
 - Crons: create and run scheduled HTTP requests, and trigger jobs registered in code.
@@ -246,6 +249,10 @@ GET /api/...      -> REST, realtime and settings APIs
 
 `--publicDir` can override the embedded console with a directory on disk, which is useful when debugging a Vite
 build.
+
+## Control plane
+
+Ekilie Box is deliberately a single-app product. The separate control-plane design for multiple instances, deploys, domains, secrets and teams lives in [docs/control-plane.md](docs/control-plane.md).
 
 ## License
 

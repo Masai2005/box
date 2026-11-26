@@ -98,6 +98,51 @@ export function SecurityPage() {
           });
         }
 
+        if (!settings.backups?.cron) {
+          list.push({
+            id: "backup-schedule",
+            severity: "medium",
+            title: "Automatic backups are off",
+            detail: "Set a backup cron expression so data is protected without manual action.",
+            href: "/settings/backups",
+            label: "Backup schedule",
+          });
+        }
+
+        if (!settings.rateLimits?.enabled) {
+          list.push({
+            id: "rate-limits",
+            severity: "medium",
+            title: "Rate limits are disabled",
+            detail: "Enable rate limits in Application settings to reduce brute-force and abuse risk.",
+            href: "/settings",
+            label: "Application settings",
+          });
+        }
+
+        const appURL = String(settings.meta?.appURL || "");
+        if (!appURL || /localhost|127\.0\.0\.1|0\.0\.0\.0/.test(appURL)) {
+          list.push({
+            id: "app-url",
+            severity: "low",
+            title: "Public application URL is not set",
+            detail: "Set the public HTTPS URL used by auth links and email templates.",
+            href: "/settings",
+            label: "Application settings",
+          });
+        }
+
+        if (Number(settings.logs?.maxDays) === 0) {
+          list.push({
+            id: "log-retention",
+            severity: "low",
+            title: "Logs are kept forever",
+            detail: "Set a retention period so the log table cannot grow without bound.",
+            href: "/logs",
+            label: "Log settings",
+          });
+        }
+
         if (settings.meta?.appName === "Acme" || !settings.meta?.appName) {
           list.push({
             id: "appname",
@@ -118,6 +163,20 @@ export function SecurityPage() {
             href: "/settings/tokens",
             label: "API tokens",
           });
+
+          const expired = tokens.items.filter(
+            (token: any) => token.expires && new Date(token.expires).getTime() < Date.now(),
+          );
+          if (expired.length) {
+            list.push({
+              id: "expired-tokens",
+              severity: "medium",
+              title: `${expired.length} expired API token(s) still stored`,
+              detail: "Delete expired tokens so stale credentials are not left behind.",
+              href: "/settings/tokens",
+              label: "API tokens",
+            });
+          }
         }
 
         if (!list.length) {

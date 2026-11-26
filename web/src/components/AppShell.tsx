@@ -4,11 +4,13 @@ import { Link, Outlet, useRouterState } from "@tanstack/react-router";
 import {
   Archive,
   BarChart3,
+  BookOpen,
   Braces,
   ChevronDown,
   Clock,
   Database,
   FileDown,
+  FileText,
   FileUp,
   Key,
   LayoutDashboard,
@@ -16,6 +18,7 @@ import {
   Mail,
   Menu,
   PanelLeft,
+  Activity,
   Radio,
   Search,
   ServerCog,
@@ -23,6 +26,7 @@ import {
   Workflow,
   Settings,
   Terminal,
+  Users,
   X,
 } from "lucide-react";
 import { AppIcon } from "@/components/AppIcon";
@@ -45,6 +49,11 @@ const primary: NavItem[] = [
 const developer: NavItem[] = [
   { href: "/schema", label: "Schema", icon: Workflow },
   { href: "/api-explorer", label: "API explorer", icon: Braces },
+  { href: "/api-docs", label: "API docs", icon: BookOpen },
+  { href: "/observability", label: "Observability", icon: Activity },
+  { href: "/status", label: "Status", icon: ShieldCheck },
+  { href: "/audit", label: "Audit log", icon: FileText },
+  { href: "/auth", label: "Auth", icon: Users },
   { href: "/realtime", label: "Realtime", icon: Radio },
   { href: "/security", label: "Security", icon: ShieldCheck },
   { href: "/runtime", label: "Runtime", icon: ServerCog },

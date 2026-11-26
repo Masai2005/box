@@ -57,6 +57,14 @@ const ApiExplorerPage = lazyRouteComponent(
   () => import("@/pages/ApiExplorerPage"),
   "ApiExplorerPage",
 );
+const ApiDocsPage = lazyRouteComponent(() => import("@/pages/ApiDocsPage"), "ApiDocsPage");
+const ObservabilityPage = lazyRouteComponent(
+  () => import("@/pages/ObservabilityPage"),
+  "ObservabilityPage",
+);
+const StatusPage = lazyRouteComponent(() => import("@/pages/StatusPage"), "StatusPage");
+const AuditPage = lazyRouteComponent(() => import("@/pages/AuditPage"), "AuditPage");
+const AuthPage = lazyRouteComponent(() => import("@/pages/AuthPage"), "AuthPage");
 const RealtimePage = lazyRouteComponent(() => import("@/pages/RealtimePage"), "RealtimePage");
 const SecurityPage = lazyRouteComponent(() => import("@/pages/SecurityPage"), "SecurityPage");
 const RuntimePage = lazyRouteComponent(() => import("@/pages/RuntimePage"), "RuntimePage");
@@ -181,6 +189,15 @@ const settingsImportRoute = createRoute({
 });
 const schemaRoute = createRoute({ getParentRoute: () => authedRoute, path: "/schema", component: SchemaPage });
 const apiExplorerRoute = createRoute({ getParentRoute: () => authedRoute, path: "/api-explorer", component: ApiExplorerPage });
+const apiDocsRoute = createRoute({ getParentRoute: () => authedRoute, path: "/api-docs", component: ApiDocsPage });
+const observabilityRoute = createRoute({
+  getParentRoute: () => authedRoute,
+  path: "/observability",
+  component: ObservabilityPage,
+});
+const statusRoute = createRoute({ getParentRoute: () => authedRoute, path: "/status", component: StatusPage });
+const auditRoute = createRoute({ getParentRoute: () => authedRoute, path: "/audit", component: AuditPage });
+const authRoute = createRoute({ getParentRoute: () => authedRoute, path: "/auth", component: AuthPage });
 const realtimeRoute = createRoute({ getParentRoute: () => authedRoute, path: "/realtime", component: RealtimePage });
 const securityRoute = createRoute({ getParentRoute: () => authedRoute, path: "/security", component: SecurityPage });
 const runtimeRoute = createRoute({ getParentRoute: () => authedRoute, path: "/runtime", component: RuntimePage });
@@ -204,6 +221,11 @@ const routeTree = rootRoute.addChildren([
     settingsImportRoute,
     schemaRoute,
     apiExplorerRoute,
+    apiDocsRoute,
+    observabilityRoute,
+    statusRoute,
+    auditRoute,
+    authRoute,
     realtimeRoute,
     securityRoute,
     runtimeRoute,
