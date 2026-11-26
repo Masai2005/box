@@ -6,6 +6,15 @@ export const pb = new PocketBase(window.location.origin);
 // The UI drives one superuser session; don't auto-cancel requests when filters change.
 pb.autoCancellation(false);
 
+// A password change or account recreation rotates the token key. Drop a stale session so the
+// route guard sends the user back to login instead of retrying every request with a dead token.
+pb.afterSend = (response, data) => {
+  if (response.status === 401 && pb.authStore.isValid) {
+    pb.authStore.clear();
+  }
+  return data;
+};
+
 export type Json = Record<string, any>;
 
 export function isSuperuser(): boolean {
