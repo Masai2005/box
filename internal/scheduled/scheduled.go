@@ -21,6 +21,9 @@ import (
 // Collection is the internal collection that stores scheduled requests.
 const Collection = "_ekilie_scheduled_requests"
 
+// RunsCollection stores one row per execution.
+const RunsCollection = "_ekilie_scheduled_runs"
+
 const jobPrefix = "ekilie-scheduled:"
 
 var methods = []string{"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD"}
@@ -94,11 +97,31 @@ func (m *Manager) bindRoutes(e *core.ServeEvent) {
 }
 
 func (m *Manager) ensureCollection() error {
-	if _, err := m.app.FindCollectionByNameOrId(Collection); err == nil {
-		return nil
+	if _, err := m.app.FindCollectionByNameOrId(Collection); err != nil {
+		if err := m.app.Save(newCollection()); err != nil {
+			return err
+		}
 	}
+	if _, err := m.app.FindCollectionByNameOrId(RunsCollection); err != nil {
+		if err := m.app.Save(newRunsCollection()); err != nil {
+			return err
+		}
+	}
+	return nil
+}
 
-	return m.app.Save(newCollection())
+func newRunsCollection() *core.Collection {
+	collection := core.NewBaseCollection(RunsCollection)
+	collection.Fields.Add(
+		&core.TextField{Name: "requestId", Required: true, Max: 40},
+		&core.TextField{Name: "name", Max: 120},
+		&core.NumberField{Name: "status", OnlyInt: true},
+		&core.NumberField{Name: "duration", OnlyInt: true},
+		&core.TextField{Name: "error", Max: 2000},
+		&core.TextField{Name: "response", Max: 2000},
+		&core.AutodateField{Name: "created", OnCreate: true},
+	)
+	return collection
 }
 
 func newCollection() *core.Collection {
@@ -206,6 +229,17 @@ func (m *Manager) execute(record *core.Record) *Result {
 			m.app.Logger().Warn("scheduled requests: failed to save run result", "id", record.Id, "error", err)
 		}
 		result.Record = record
+
+		run := core.NewRecord(mustCollection(m.app, RunsCollection))
+		run.Set("requestId", record.Id)
+		run.Set("name", record.GetString("name"))
+		run.Set("status", status)
+		run.Set("duration", result.Duration)
+		run.Set("error", errorText)
+		run.Set("response", responseText)
+		if err := m.app.Save(run); err != nil {
+			m.app.Logger().Warn("scheduled requests: failed to save run history", "id", record.Id, "error", err)
+		}
 	}()
 
 	method := strings.ToUpper(record.GetString("method"))
@@ -263,6 +297,14 @@ func (m *Manager) execute(record *core.Record) *Result {
 	}
 
 	return result
+}
+
+func mustCollection(app core.App, name string) *core.Collection {
+	collection, err := app.FindCollectionByNameOrId(name)
+	if err != nil {
+		return core.NewBaseCollection(name)
+	}
+	return collection
 }
 
 func validMethod(method string) bool {

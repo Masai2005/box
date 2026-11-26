@@ -48,6 +48,17 @@ type ScheduledRequest = {
   runCount?: number;
 };
 
+type Run = {
+  id: string;
+  requestId: string;
+  name?: string;
+  status?: number;
+  duration?: number;
+  error?: string;
+  response?: string;
+  created: string;
+};
+
 type Form = {
   name: string;
   schedule: string;
@@ -60,6 +71,7 @@ type Form = {
 };
 
 const COLLECTION = "_ekilie_scheduled_requests";
+const RUNS_COLLECTION = "_ekilie_scheduled_runs";
 const JOB_PREFIX = "ekilie-scheduled:";
 const METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD"];
 const PRESETS = [
@@ -83,6 +95,7 @@ const emptyForm = (): Form => ({
 export function SettingsCronsPage() {
   const [crons, setCrons] = useState<Cron[]>([]);
   const [scheduled, setScheduled] = useState<ScheduledRequest[]>([]);
+  const [runs, setRuns] = useState<Run[]>([]);
   const [loading, setLoading] = useState(true);
   const [running, setRunning] = useState("");
   const [scheduledError, setScheduledError] = useState("");
@@ -98,9 +111,10 @@ export function SettingsCronsPage() {
     setLoading(true);
     setScheduledError("");
     try {
-      const [native, requests] = await Promise.allSettled([
+      const [native, requests, history] = await Promise.allSettled([
         pb.crons.getFullList(),
         pb.collection(COLLECTION).getFullList({ sort: "-created" }),
+        pb.collection(RUNS_COLLECTION).getList(1, 50, { sort: "-created" }),
       ]);
       if (native.status === "fulfilled") {
         setCrons(native.value.filter((job) => !job.id.startsWith(JOB_PREFIX)));
@@ -110,6 +124,9 @@ export function SettingsCronsPage() {
         setScheduled(requests.value as unknown as ScheduledRequest[]);
       } else {
         setScheduledError(errorMessage(requests.reason));
+      }
+      if (history.status === "fulfilled") {
+        setRuns(history.value.items as unknown as Run[]);
       }
     } finally {
       setLoading(false);
@@ -434,6 +451,57 @@ export function SettingsCronsPage() {
                 )}
               </TableBody>
             </Table>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Recent runs</CardTitle>
+            <CardDescription>Latest executions with status, duration and response.</CardDescription>
+          </CardHeader>
+          <CardContent className="p-0">
+            {loading ? (
+              <div className="space-y-2 p-4">
+                <Skeleton className="h-5 w-full" />
+                <Skeleton className="h-5 w-full" />
+              </div>
+            ) : runs.length ? (
+              <div className="overflow-auto">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-muted/30 font-mono text-[9px] uppercase tracking-[0.12em] text-muted-foreground">
+                    <tr>
+                      <th className="px-4 py-2">Request</th>
+                      <th className="px-4 py-2">Status</th>
+                      <th className="px-4 py-2">Duration</th>
+                      <th className="px-4 py-2">Response</th>
+                      <th className="px-4 py-2">When</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {runs.map((run) => {
+                      const failed = Boolean(run.error) || Number(run.status) >= 400;
+                      return (
+                        <tr key={run.id} className="border-t border-border">
+                          <td className="px-4 py-2 font-mono text-[10px]">{run.name || run.requestId}</td>
+                          <td className="px-4 py-2">
+                            <Badge variant={failed ? "danger" : "success"}>{run.status || (run.error ? "ERR" : "-")}</Badge>
+                          </td>
+                          <td className="px-4 py-2 font-mono text-[10px] text-muted-foreground">
+                            {run.duration ? `${run.duration} ms` : "-"}
+                          </td>
+                          <td className="max-w-[320px] truncate px-4 py-2 font-mono text-[10px] text-muted-foreground" title={run.error || run.response}>
+                            {run.error || run.response || "-"}
+                          </td>
+                          <td className="whitespace-nowrap px-4 py-2 text-[10px] text-muted-foreground">{formatDate(run.created)}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <EmptyState title="No runs yet" description="Run a scheduled request to build a history." />
+            )}
           </CardContent>
         </Card>
 

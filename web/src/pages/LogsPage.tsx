@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Eye, Radio, RefreshCw, Search, Settings2, Trash2 } from "lucide-react";
+import { Copy, Eye, Radio, RefreshCw, Save, Search, Settings2, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { PageBody, PageHeader } from "@/components/PageHeader";
 import {
@@ -41,6 +41,18 @@ const LEVEL_FILTERS = [
 ];
 
 const PER_PAGE = 30;
+const FILTERS_KEY = "ekilie-box-log-filters";
+
+type SavedFilter = { name: string; filter: string; level: string };
+
+function readSavedFilters(): SavedFilter[] {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(FILTERS_KEY) || "[]");
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
 
 function VolumeChart({ stats, peak }: { stats: { date: string; total: number }[]; peak: number }) {
   if (!stats.length) {
@@ -87,6 +99,15 @@ function VolumeChart({ stats, peak }: { stats: { date: string; total: number }[]
   );
 }
 
+function Detail({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="min-w-0">
+      <p className="font-mono text-[8px] uppercase tracking-[0.12em] text-muted-foreground">{label}</p>
+      <p className="mt-1 truncate font-mono text-[10px]" title={value}>{value}</p>
+    </div>
+  );
+}
+
 export function LogsPage() {
   const [logs, setLogs] = useState<Log[]>([]);
   const [total, setTotal] = useState(0);
@@ -102,6 +123,7 @@ export function LogsPage() {
   const [busy, setBusy] = useState(false);
   const [live, setLive] = useState(false);
   const [liveTick, setLiveTick] = useState(0);
+  const [savedFilters, setSavedFilters] = useState<SavedFilter[]>(readSavedFilters);
 
   const combinedFilter = useMemo(() => {
     return [filter.trim(), level].filter(Boolean).join(" && ");
@@ -182,6 +204,37 @@ export function LogsPage() {
     }
   }
 
+  function saveFilter() {
+    const name = window.prompt("Name this log filter");
+    if (!name?.trim()) return;
+    const next = [
+      { name: name.trim(), filter, level },
+      ...savedFilters.filter((item) => item.name !== name.trim()),
+    ].slice(0, 25);
+    setSavedFilters(next);
+    localStorage.setItem(FILTERS_KEY, JSON.stringify(next));
+    toast.success("Filter saved.");
+  }
+
+  function applyFilter(name: string) {
+    const saved = savedFilters.find((item) => item.name === name);
+    if (!saved) return;
+    setFilter(saved.filter);
+    setLevel(saved.level);
+  }
+
+  function deleteFilter() {
+    const saved = savedFilters.find((item) => item.name === filterName);
+    if (!saved || !window.confirm(`Delete the saved filter "${saved.name}"?`)) return;
+    const next = savedFilters.filter((item) => item.name !== saved.name);
+    setSavedFilters(next);
+    localStorage.setItem(FILTERS_KEY, JSON.stringify(next));
+  }
+
+  const filterName = savedFilters.find(
+    (item) => item.filter === filter && item.level === level,
+  )?.name || "";
+
   const pages = Math.max(1, Math.ceil(total / PER_PAGE));
   const peak = Math.max(1, ...stats.map((point) => point.total));
 
@@ -236,13 +289,35 @@ export function LogsPage() {
               onChange={(event) => setFilter(event.target.value)}
             />
           </div>
-          <Select value={level} onChange={(event) => setLevel(event.target.value)} className="w-[160px]">
+          <Select value={level} onChange={(event) => setLevel(event.target.value)} className="w-[160px]" aria-label="Log level">
             {LEVEL_FILTERS.map((option) => (
               <option key={option.value} value={option.value}>
                 {option.label}
               </option>
             ))}
           </Select>
+          <Select
+            value={filterName}
+            onChange={(event) => applyFilter(event.target.value)}
+            className="w-[180px]"
+            aria-label="Saved log filters"
+          >
+            <option value="">Saved filters</option>
+            {savedFilters.map((item) => (
+              <option key={item.name} value={item.name}>
+                {item.name}
+              </option>
+            ))}
+          </Select>
+          <Button variant="outline" size="sm" onClick={saveFilter}>
+            <Save />
+            Save filter
+          </Button>
+          {filterName ? (
+            <Button variant="ghost" size="icon" onClick={deleteFilter} aria-label="Delete saved filter">
+              <Trash2 />
+            </Button>
+          ) : null}
         </div>
 
         {error ? (
@@ -326,14 +401,37 @@ export function LogsPage() {
         title="Log entry"
         description={preview ? formatDate(preview.created) : undefined}
         className="max-w-3xl"
+        footer={
+          preview ? (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                navigator.clipboard.writeText(JSON.stringify(preview, null, 2));
+                toast.success("Log copied.");
+              }}
+            >
+              <Copy />
+              Copy JSON
+            </Button>
+          ) : null
+        }
       >
         {preview ? (
           <div className="space-y-3">
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <Badge variant={LEVELS[preview.level]?.variant || "secondary"}>
                 {LEVELS[preview.level]?.label || preview.level}
               </Badge>
               <span className="text-xs">{preview.message}</span>
+            </div>
+            <div className="grid gap-2 border border-border p-3 text-xs sm:grid-cols-3">
+              <Detail label="Request ID" value={preview.data?.requestId || preview.data?.request_id || "-"} />
+              <Detail label="Method" value={preview.data?.method || preview.data?.request?.method || "-"} />
+              <Detail label="Path" value={preview.data?.url || preview.data?.path || preview.data?.request?.url || "-"} />
+              <Detail label="Status" value={String(preview.data?.status || preview.data?.response?.status || "-")} />
+              <Detail label="Duration" value={preview.data?.execTime ? `${preview.data.execTime} ms` : "-"} />
+              <Detail label="User" value={preview.data?.authId || preview.data?.user || "-"} />
             </div>
             <pre className="max-h-[50vh] overflow-auto border border-border bg-background p-4 font-mono text-[11px] scrollbar-thin">
               {JSON.stringify(preview, null, 2)}

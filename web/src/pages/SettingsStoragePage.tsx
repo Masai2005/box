@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Download, File, HardDrive, RefreshCw, Save } from "lucide-react";
+import { Download, File, HardDrive, RefreshCw, Save, Trash2, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { PageBody, PageHeader } from "@/components/PageHeader";
 import {
@@ -53,6 +53,8 @@ export function SettingsStoragePage() {
   const [recordsLoading, setRecordsLoading] = useState(false);
   const [fileToken, setFileToken] = useState("");
   const [baseline, setBaseline] = useState("");
+  const [usage, setUsage] = useState<{ collection: string; field: string; files: number; records: number }[]>([]);
+  const [usageLoading, setUsageLoading] = useState(false);
 
   async function load() {
     setLoading(true);
@@ -108,6 +110,45 @@ export function SettingsStoragePage() {
     [collections, selectedCollection],
   );
 
+  async function loadUsage() {
+    if (!collections.length) {
+      setUsage([]);
+      return;
+    }
+    setUsageLoading(true);
+    try {
+      const results = await Promise.allSettled(
+        collections.map(async (collection) => {
+          const fields = (collection.fields || []).filter((field: any) => field.type === "file");
+          if (!fields.length) return [];
+          const rows = await pb.collection(collection.name).getFullList({
+            fields: ["id", ...fields.map((field: any) => field.name)].join(","),
+          });
+          return fields.map((field: any) => {
+            let files = 0;
+            let records = 0;
+            for (const record of rows as any[]) {
+              const value = record[field.name];
+              const names = Array.isArray(value) ? value : value ? [value] : [];
+              if (names.length) records++;
+              files += names.length;
+            }
+            return { collection: collection.name, field: field.name, files, records };
+          });
+        }),
+      );
+      setUsage(
+        results.flatMap((result) => (result.status === "fulfilled" ? result.value : [])) as any,
+      );
+    } finally {
+      setUsageLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    void loadUsage();
+  }, [collections]);
+
   const fileRows = useMemo(() => {
     const rows: { record: any; field: string; name: string; protected?: boolean }[] = [];
     for (const record of records) {
@@ -124,6 +165,53 @@ export function SettingsStoragePage() {
 
   function update(path: string, value: any) {
     setSettings((current: any) => set(current, path, value));
+  }
+
+  async function refreshFiles() {
+    if (!selectedCollection) return;
+    setRecordsLoading(true);
+    try {
+      const result = await pb.collection(selectedCollection).getList(1, 50, { sort: "-created" });
+      setRecords(result.items);
+      void loadUsage();
+    } catch (err) {
+      toast.error(errorMessage(err));
+    } finally {
+      setRecordsLoading(false);
+    }
+  }
+
+  async function deleteFile(row: { record: any; field: string; name: string }) {
+    if (!window.confirm(`Delete ${row.name} from this record?`)) return;
+    try {
+      const data = new FormData();
+      data.append(`${row.field}-`, row.name);
+      await pb.collection(selectedCollection).update(row.record.id, data);
+      toast.success("File deleted.");
+      await refreshFiles();
+    } catch (err) {
+      toast.error(errorMessage(err));
+    }
+  }
+
+  function replaceFile(row: { record: any; field: string; name: string }) {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.onchange = async () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      try {
+        const data = new FormData();
+        data.append(`${row.field}-`, row.name);
+        data.append(`+${row.field}`, file);
+        await pb.collection(selectedCollection).update(row.record.id, data);
+        toast.success("File replaced.");
+        await refreshFiles();
+      } catch (err) {
+        toast.error(errorMessage(err));
+      }
+    };
+    input.click();
   }
 
   async function save() {
@@ -245,6 +333,44 @@ export function SettingsStoragePage() {
             ) : null}
 
             <Card>
+              <CardHeader>
+                <CardTitle>Storage usage</CardTitle>
+                <CardDescription>File counts by collection and file field.</CardDescription>
+              </CardHeader>
+              <CardContent className="p-0">
+                {usageLoading ? (
+                  <div className="space-y-2 p-4">
+                    <Skeleton className="h-5 w-full" />
+                    <Skeleton className="h-5 w-full" />
+                  </div>
+                ) : usage.length ? (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Collection</TableHead>
+                        <TableHead>Field</TableHead>
+                        <TableHead>Files</TableHead>
+                        <TableHead>Records with files</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {usage.map((row) => (
+                        <TableRow key={`${row.collection}-${row.field}`}>
+                          <TableCell className="font-mono text-[10px]">{row.collection}</TableCell>
+                          <TableCell className="font-mono text-[10px] text-muted-foreground">{row.field}</TableCell>
+                          <TableCell className="font-mono text-[11px]">{row.files}</TableCell>
+                          <TableCell className="font-mono text-[11px] text-muted-foreground">{row.records}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                ) : (
+                  <EmptyState title="No stored files" description="Upload files to a file field to see usage here." />
+                )}
+              </CardContent>
+            </Card>
+
+            <Card>
               <CardHeader className="flex flex-wrap items-center justify-between gap-3">
                 <div>
                   <CardTitle>Uploaded files</CardTitle>
@@ -288,7 +414,7 @@ export function SettingsStoragePage() {
                         <TableHead>Field</TableHead>
                         <TableHead>Record</TableHead>
                         <TableHead>Protection</TableHead>
-                        <TableHead className="text-right">Open</TableHead>
+                        <TableHead className="text-right">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -317,11 +443,29 @@ export function SettingsStoragePage() {
                               </Badge>
                             </TableCell>
                             <TableCell className="text-right">
-                              <a href={url} target="_blank" rel="noopener noreferrer">
-                                <Button variant="ghost" size="icon" aria-label="Open file">
-                                  <Download />
+                              <div className="flex items-center justify-end gap-1">
+                                <a href={url} target="_blank" rel="noopener noreferrer">
+                                  <Button variant="ghost" size="icon" aria-label="Open file">
+                                    <Download />
+                                  </Button>
+                                </a>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => replaceFile(row)}
+                                  aria-label={`Replace ${row.name}`}
+                                >
+                                  <Upload />
                                 </Button>
-                              </a>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => deleteFile(row)}
+                                  aria-label={`Delete ${row.name}`}
+                                >
+                                  <Trash2 />
+                                </Button>
+                              </div>
                             </TableCell>
                           </TableRow>
                         );

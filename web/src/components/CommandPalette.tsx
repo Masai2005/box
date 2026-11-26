@@ -2,10 +2,13 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import {
   Archive,
+  Activity,
   BarChart3,
+  BookOpen,
   Braces,
   Database,
   FileDown,
+  FileText,
   FileUp,
   Key,
   LayoutDashboard,
@@ -17,6 +20,7 @@ import {
   ShieldCheck,
   Sun,
   Terminal,
+  Users,
   Workflow,
 } from "lucide-react";
 import { useAuth } from "@/components/AuthProvider";
@@ -151,6 +155,11 @@ export function CommandPalette({
       { id: "mail", label: "Bulk mail", group: "Navigate", icon: Mail, run: nav("/bulkmail") },
       { id: "schema", label: "Schema / ERD", group: "Navigate", icon: Workflow, run: nav("/schema") },
       { id: "api", label: "API explorer", group: "Navigate", icon: Braces, run: nav("/api-explorer") },
+      { id: "api-docs", label: "API docs", group: "Navigate", icon: BookOpen, run: nav("/api-docs") },
+      { id: "observability", label: "Observability", group: "Navigate", icon: Activity, run: nav("/observability") },
+      { id: "status", label: "Status", group: "Navigate", icon: ShieldCheck, run: nav("/status") },
+      { id: "audit", label: "Audit log", group: "Navigate", icon: FileText, run: nav("/audit") },
+      { id: "auth", label: "Auth", group: "Navigate", icon: Users, run: nav("/auth") },
       { id: "realtime", label: "Realtime inspector", group: "Navigate", icon: Workflow, run: nav("/realtime") },
       { id: "security", label: "Security checks", group: "Navigate", icon: ShieldCheck, run: nav("/security") },
       { id: "runtime", label: "Runtime", group: "Navigate", icon: ServerCog, run: nav("/runtime") },

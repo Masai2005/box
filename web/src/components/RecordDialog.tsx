@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
-import { File as FileIcon, X } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Braces, File as FileIcon, Plus, Terminal, UserRound, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button, Input, Label, Select, Sheet, Textarea } from "@/components/ui";
 import { pb, errorMessage, type Json } from "@/lib/pb";
 import { discardChanges } from "@/lib/useUnsavedChanges";
+import { localTimeZone, toLocalDateTime } from "@/lib/date";
 
 type Field = {
   id?: string;
@@ -35,12 +36,7 @@ function initialValue(field: Field, record: Json | null) {
   if (field.type === "json") return JSON.stringify(value ?? {}, null, 2);
   if (field.type === "select" && (field.maxSelect || 0) > 1) return Array.isArray(value) ? value : [];
   if (field.type === "relation") return Array.isArray(value) ? value : value ? [value] : [];
-  if (field.type === "date") {
-    if (!value) return "";
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) return String(value).replace(" ", "T").slice(0, 16);
-    return date.toISOString().slice(0, 16);
-  }
+  if (field.type === "date") return toLocalDateTime(value);
   if (field.type === "file") return [];
   return value ?? "";
 }
@@ -51,6 +47,7 @@ export function RecordDialog({
   collection,
   record,
   onSaved,
+  onRefresh,
   collections = [],
 }: {
   open: boolean;
@@ -58,6 +55,7 @@ export function RecordDialog({
   collection: Collection | null;
   record: Json | null;
   onSaved: () => void;
+  onRefresh?: () => void;
   collections?: Collection[];
 }) {
   const editableFields = useMemo(() => {
@@ -79,10 +77,13 @@ export function RecordDialog({
 
   const [form, setForm] = useState<Record<string, any>>({});
   const [removedFiles, setRemovedFiles] = useState<Record<string, string[]>>({});
+  const [fileOrder, setFileOrder] = useState<Record<string, string[]>>({});
   const [fileToken, setFileToken] = useState("");
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const [baseline, setBaseline] = useState("");
+  const [impersonation, setImpersonation] = useState<{ token: string; record?: any } | null>(null);
+  const [autosave, setAutosave] = useState(() => localStorage.getItem("ekilie-box-record-autosave") === "true");
 
   useEffect(() => {
     if (!open || !collection) return;
@@ -90,10 +91,18 @@ export function RecordDialog({
     for (const field of editableFields) {
       next[field.name] = initialValue(field, record);
     }
+    const order: Record<string, string[]> = {};
+    for (const field of editableFields) {
+      if (field.type !== "file") continue;
+      const existing = record?.[field.name];
+      order[field.name] = Array.isArray(existing) ? [...existing] : existing ? [existing] : [];
+    }
     setForm(next);
     setRemovedFiles({});
+    setFileOrder(order);
     setErrors({});
-    setBaseline(snapshotForm(next, {}));
+    setImpersonation(null);
+    setBaseline(snapshotForm(next, {}, order));
     if (record && editableFields.some((field) => field.type === "file")) {
       pb.files
         .getToken()
@@ -107,15 +116,41 @@ export function RecordDialog({
   const dirty =
     open &&
     baseline !== "" &&
-    baseline !== snapshotForm(form, removedFiles);
+    baseline !== snapshotForm(form, removedFiles, fileOrder);
+
+  const saveRef = useRef<() => Promise<void>>(async () => {});
+
+  useEffect(() => {
+    localStorage.setItem("ekilie-box-record-autosave", String(autosave));
+  }, [autosave]);
+
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key.toLowerCase() === "s" && (event.metaKey || event.ctrlKey)) {
+        event.preventDefault();
+        void saveRef.current();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open]);
+
+  const isEdit = Boolean(record?.id);
+
+  useEffect(() => {
+    if (!open || !autosave || !isEdit || !dirty || busy) return;
+    const timer = setTimeout(() => {
+      void save({ keepOpen: true, silent: true });
+    }, 1500);
+    return () => clearTimeout(timer);
+  }, [open, autosave, isEdit, dirty, busy, form, removedFiles, fileOrder]);
 
   function close() {
     discardChanges(dirty, onClose);
   }
 
   if (!collection) return null;
-
-  const isEdit = Boolean(record?.id);
 
   function validate() {
     const next: Record<string, string> = {};
@@ -128,6 +163,8 @@ export function RecordDialog({
         const kept = existingNames.filter((name) => !(removedFiles[field.name] || []).includes(name));
         if (!(value || []).length && !kept.length) {
           next[field.name] = "Required";
+        } else if ((value || []).length + kept.length > (field.maxSelect || 1)) {
+          next[field.name] = `Maximum ${field.maxSelect || 1} file(s)`;
         }
         continue;
       }
@@ -143,17 +180,45 @@ export function RecordDialog({
     return Object.keys(next).length === 0;
   }
 
-  async function submit(event: React.FormEvent) {
-    event.preventDefault();
+  function jsonPayload() {
+    const payload: Record<string, any> = {};
+    for (const field of editableFields) {
+      if (field.type === "file") continue;
+      const value = form[field.name];
+      if (field.type === "json") {
+        try {
+          payload[field.name] = value ? JSON.parse(value) : null;
+        } catch {
+          throw new Error(`${field.name}: invalid JSON`);
+        }
+      } else if (field.type === "select" && (field.maxSelect || 0) > 1) {
+        payload[field.name] = value || [];
+      } else if (field.type === "relation") {
+        payload[field.name] = Array.isArray(value) ? value : [];
+      } else if (field.type === "date") {
+        payload[field.name] = value ? new Date(value).toISOString() : "";
+      } else if (field.type === "number") {
+        payload[field.name] = value === "" ? 0 : Number(value);
+      } else if (field.type === "password") {
+        if (value) payload[field.name] = value;
+      } else {
+        payload[field.name] = value;
+      }
+    }
+    return payload;
+  }
+
+  async function save(options?: { keepOpen?: boolean; silent?: boolean }) {
     if (busy || !collection) return;
     if (!validate()) {
-      toast.error("Fill the required fields.");
+      if (!options?.silent) toast.error("Fill the required fields.");
       return;
     }
     setBusy(true);
+    const savedSnapshot = snapshotForm(form, removedFiles, fileOrder);
     try {
       const hasFileFields = editableFields.some((field) => field.type === "file");
-      let payload: any = {};
+      let payload: any = jsonPayload();
 
       if (hasFileFields) {
         const formData = new FormData();
@@ -163,7 +228,17 @@ export function RecordDialog({
             for (const name of removedFiles[field.name] || []) {
               formData.append(`${field.name}-`, name);
             }
-            for (const file of value || []) {
+            const kept = (fileOrder[field.name] || []).filter(
+              (name) => !(removedFiles[field.name] || []).includes(name),
+            );
+            const newFiles = Array.from((value || []) as File[]);
+            if ((field.maxSelect || 1) === 1 && newFiles.length && kept.length) {
+              // Selecting a new file in a single-file field replaces the current one.
+              for (const name of kept) formData.append(`${field.name}-`, name);
+            } else {
+              for (const name of kept) formData.append(field.name, name);
+            }
+            for (const file of newFiles) {
               formData.append(isEdit ? `+${field.name}` : field.name, file);
             }
             continue;
@@ -171,37 +246,19 @@ export function RecordDialog({
           appendValue(formData, field, value);
         }
         payload = formData;
-      } else {
-        for (const field of editableFields) {
-          const value = form[field.name];
-          if (field.type === "json") {
-            try {
-              payload[field.name] = value ? JSON.parse(value) : null;
-            } catch {
-              throw new Error(`${field.name}: invalid JSON`);
-            }
-          } else if (field.type === "select" && (field.maxSelect || 0) > 1) {
-            payload[field.name] = value || [];
-          } else if (field.type === "relation") {
-            payload[field.name] = Array.isArray(value) ? value : [];
-          } else if (field.type === "date") {
-            payload[field.name] = value ? new Date(value).toISOString() : "";
-          } else if (field.type === "number") {
-            payload[field.name] = value === "" ? 0 : Number(value);
-          } else if (field.type === "password") {
-            if (value) payload[field.name] = value;
-          } else {
-            payload[field.name] = value;
-          }
-        }
       }
 
       if (isEdit) {
         await pb.collection(collection.name).update(record!.id, payload);
-        toast.success("Record updated.");
+        if (!options?.silent) toast.success("Record updated.");
       } else {
         await pb.collection(collection.name).create(payload);
-        toast.success("Record created.");
+        if (!options?.silent) toast.success("Record created.");
+      }
+      if (options?.keepOpen) {
+        setBaseline(savedSnapshot);
+        onRefresh?.();
+        return;
       }
       onSaved();
       onClose();
@@ -209,6 +266,54 @@ export function RecordDialog({
       toast.error(errorMessage(err));
     } finally {
       setBusy(false);
+    }
+  }
+
+  saveRef.current = () => save();
+
+  function submit(event: React.FormEvent) {
+    event.preventDefault();
+    void save();
+  }
+
+  async function impersonate() {
+    if (!collection || !record?.id) return;
+    try {
+      const result = await pb.send(
+        `/api/collections/${encodeURIComponent(collection.name)}/impersonate/${record.id}`,
+        { method: "POST" },
+      );
+      setImpersonation(result as { token: string; record?: any });
+      toast.success("Impersonation token created.");
+    } catch (err) {
+      toast.error(errorMessage(err));
+    }
+  }
+
+  async function copy(kind: "curl" | "js") {
+    if (!collection) return;
+    let payload: Record<string, any>;
+    try {
+      payload = jsonPayload();
+    } catch (err) {
+      toast.error(errorMessage(err));
+      return;
+    }
+    if (editableFields.some((field) => field.type === "file")) {
+      toast.message("File fields are omitted from copied requests.");
+    }
+    const url = `${window.location.origin}/api/collections/${collection.name}/records${isEdit ? `/${record!.id}` : ""}`;
+    const method = isEdit ? "PATCH" : "POST";
+    const body = JSON.stringify(payload, null, 2);
+    const text =
+      kind === "curl"
+        ? `curl -X ${method} '${url}' \\\n  -H 'Authorization: <token>' \\\n  -H 'Content-Type: application/json' \\\n  -d '${body.replaceAll("'", "'\\''")}'`
+        : `await pb.collection(${JSON.stringify(collection.name)}).${isEdit ? `update(${JSON.stringify(record!.id)}, ` : "create("}${body});`;
+    try {
+      await navigator.clipboard.writeText(text);
+      toast.success(kind === "curl" ? "cURL copied." : "JavaScript copied.");
+    } catch {
+      toast.error("Could not copy to the clipboard.");
     }
   }
 
@@ -227,6 +332,23 @@ export function RecordDialog({
       description={isEdit ? record?.id : "Create a new record"}
       footer={
         <>
+          <Button variant="ghost" size="icon" onClick={() => copy("curl")} aria-label="Copy record as cURL" title="Copy as cURL">
+            <Terminal />
+          </Button>
+          <Button variant="ghost" size="icon" onClick={() => copy("js")} aria-label="Copy record as JavaScript" title="Copy as JavaScript">
+            <Braces />
+          </Button>
+          {isEdit && collection.type === "auth" ? (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={impersonate}
+              aria-label="Impersonate auth record"
+              title="Impersonate auth record"
+            >
+              <UserRound />
+            </Button>
+          ) : null}
           <Button variant="outline" onClick={close} disabled={busy}>
             Cancel
           </Button>
@@ -237,6 +359,42 @@ export function RecordDialog({
       }
     >
       <form id="record-form" onSubmit={submit} className="grid gap-4 sm:grid-cols-2">
+        {isEdit ? (
+          <label className="sm:col-span-2 flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
+            <input
+              type="checkbox"
+              checked={autosave}
+              onChange={(event) => setAutosave(event.target.checked)}
+              className="h-4 w-4 accent-[hsl(var(--accent))]"
+            />
+            Autosave changes after 1.5 seconds
+          </label>
+        ) : null}
+        {impersonation ? (
+          <div className="sm:col-span-2 border border-amber-500/30 bg-amber-500/10 p-3">
+            <div className="flex items-center justify-between gap-2">
+              <p className="font-mono text-[10px] font-bold uppercase tracking-[0.1em] text-amber-700 dark:text-amber-400">
+                Impersonation token
+              </p>
+              <div className="flex gap-1">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    navigator.clipboard.writeText(impersonation.token);
+                    toast.success("Token copied.");
+                  }}
+                >
+                  Copy
+                </Button>
+                <Button variant="ghost" size="icon" onClick={() => setImpersonation(null)} aria-label="Hide impersonation token">
+                  <X />
+                </Button>
+              </div>
+            </div>
+            <p className="mt-2 break-all font-mono text-[10px]">{impersonation.token}</p>
+          </div>
+        ) : null}
         {editableFields.map((field) => (
           <FieldInput
             key={field.id || field.name}
@@ -246,8 +404,10 @@ export function RecordDialog({
             record={record}
             fileToken={fileToken}
             removedFiles={removedFiles[field.name] || []}
+            fileOrder={fileOrder[field.name] || []}
             collections={collections}
             onRemoveFile={(name) => removeExistingFile(field, name)}
+            onReorder={(names) => setFileOrder((current) => ({ ...current, [field.name]: names }))}
             onChange={(value) => {
               setForm((current) => ({ ...current, [field.name]: value }));
               setErrors((current) => ({ ...current, [field.name]: "" }));
@@ -264,7 +424,124 @@ export function RecordDialog({
   );
 }
 
-function snapshotForm(form: Record<string, any>, removedFiles: Record<string, string[]>) {
+function JsonInput({
+  field,
+  value,
+  onChange,
+}: {
+  field: Field;
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  const [error, setError] = useState("");
+
+  function check(next: string) {
+    if (!next.trim()) {
+      setError("");
+      return;
+    }
+    try {
+      JSON.parse(next);
+      setError("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Invalid JSON");
+    }
+  }
+
+  return (
+    <>
+      <Textarea
+        id={field.name}
+        name={field.name}
+        rows={5}
+        className="font-mono"
+        value={value || ""}
+        onChange={(event) => {
+          onChange(event.target.value);
+          check(event.target.value);
+        }}
+      />
+      <div className="mt-1 flex items-center justify-between gap-2">
+        <p className={`text-[10px] ${error ? "text-destructive" : "text-muted-foreground"}`}>
+          {error || "Valid JSON"}
+        </p>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => {
+            try {
+              const formatted = JSON.stringify(JSON.parse(value || "null"), null, 2);
+              onChange(formatted);
+              setError("");
+            } catch {
+              setError("Cannot format invalid JSON");
+            }
+          }}
+        >
+          Format
+        </Button>
+      </div>
+    </>
+  );
+}
+
+function HtmlEditor({
+  field,
+  value,
+  onChange,
+}: {
+  field: Field;
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  const ref = useRef<HTMLTextAreaElement>(null);
+
+  function wrap(before: string, after: string) {
+    const element = ref.current;
+    if (!element) return;
+    const start = element.selectionStart;
+    const end = element.selectionEnd;
+    const next = `${value.slice(0, start)}${before}${value.slice(start, end)}${after}${value.slice(end)}`;
+    onChange(next);
+    requestAnimationFrame(() => {
+      element.focus();
+      element.setSelectionRange(start + before.length, end + before.length);
+    });
+  }
+
+  return (
+    <div>
+      <div className="mb-1 flex flex-wrap gap-1">
+        {[
+          ["Bold", "<strong>", "</strong>"],
+          ["Italic", "<em>", "</em>"],
+          ["Code", "<code>", "</code>"],
+          ["Link", '<a href="">', "</a>"],
+        ].map(([label, before, after]) => (
+          <Button key={label} variant="outline" size="sm" onClick={() => wrap(before, after)}>
+            {label}
+          </Button>
+        ))}
+      </div>
+      <Textarea
+        ref={ref}
+        id={field.name}
+        name={field.name}
+        rows={10}
+        className="font-mono"
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder="<p>HTML content</p>"
+      />
+    </div>
+  );
+}
+
+function snapshotForm(
+  form: Record<string, any>,
+  removedFiles: Record<string, string[]>,
+  fileOrder: Record<string, string[]> = {},
+) {
   const values: Record<string, any> = {};
   for (const [key, value] of Object.entries(form)) {
     if (Array.isArray(value) && value.every((item) => item instanceof File)) {
@@ -273,7 +550,7 @@ function snapshotForm(form: Record<string, any>, removedFiles: Record<string, st
       values[key] = value;
     }
   }
-  return JSON.stringify({ values, removedFiles });
+  return JSON.stringify({ values, removedFiles, fileOrder });
 }
 
 function appendValue(formData: FormData, field: Field, value: any) {
@@ -308,9 +585,11 @@ function FieldInput({
   record,
   fileToken,
   removedFiles,
+  fileOrder,
   collections,
   onChange,
   onRemoveFile,
+  onReorder,
 }: {
   field: Field;
   value: any;
@@ -318,9 +597,11 @@ function FieldInput({
   record: Json | null;
   fileToken: string;
   removedFiles: string[];
+  fileOrder: string[];
   collections: Collection[];
   onChange: (value: any) => void;
   onRemoveFile: (name: string) => void;
+  onReorder: (names: string[]) => void;
 }) {
   const label = (
     <Label htmlFor={field.name}>
@@ -385,14 +666,7 @@ function FieldInput({
     return (
       <div className="sm:col-span-2">
         {label}
-        <Textarea
-          id={field.name}
-          name={field.name}
-          rows={5}
-          className="font-mono"
-          value={value || ""}
-          onChange={(event) => onChange(event.target.value)}
-        />
+        <JsonInput field={field} value={value} onChange={onChange} />
         {helper}
       </div>
     );
@@ -400,7 +674,13 @@ function FieldInput({
 
   if (field.type === "file") {
     const existing = record?.[field.name];
-    const existingNames = Array.isArray(existing) ? existing : existing ? [existing] : [];
+    const existingNames = fileOrder.length
+      ? fileOrder
+      : Array.isArray(existing)
+        ? existing
+        : existing
+          ? [existing]
+          : [];
     const kept = existingNames.filter((name) => !removedFiles.includes(name));
     return (
       <div className="sm:col-span-2">
@@ -413,14 +693,46 @@ function FieldInput({
                 <div key={name} className="flex items-center gap-2 border border-border bg-background p-1.5">
                   <FilePreview url={url} name={name} />
                   <span className="max-w-[180px] truncate font-mono text-[10px]">{name}</span>
-                  <button
-                    type="button"
-                    onClick={() => onRemoveFile(name)}
-                    className="text-muted-foreground hover:text-destructive"
-                    aria-label={`Remove ${name}`}
-                  >
-                    <X className="h-3.5 w-3.5" />
-                  </button>
+                  <div className="flex items-center gap-0.5">
+                    <button
+                      type="button"
+                      disabled={kept.indexOf(name) === 0}
+                      onClick={() => {
+                        const index = kept.indexOf(name);
+                        if (index <= 0) return;
+                        const next = [...kept];
+                        [next[index - 1], next[index]] = [next[index], next[index - 1]];
+                        onReorder([...next, ...removedFiles]);
+                      }}
+                      className="text-muted-foreground hover:text-foreground disabled:opacity-30"
+                      aria-label={`Move ${name} up`}
+                    >
+                      ↑
+                    </button>
+                    <button
+                      type="button"
+                      disabled={kept.indexOf(name) === kept.length - 1}
+                      onClick={() => {
+                        const index = kept.indexOf(name);
+                        if (index < 0 || index >= kept.length - 1) return;
+                        const next = [...kept];
+                        [next[index], next[index + 1]] = [next[index + 1], next[index]];
+                        onReorder([...next, ...removedFiles]);
+                      }}
+                      className="text-muted-foreground hover:text-foreground disabled:opacity-30"
+                      aria-label={`Move ${name} down`}
+                    >
+                      ↓
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onRemoveFile(name)}
+                      className="text-muted-foreground hover:text-destructive"
+                      aria-label={`Remove ${name}`}
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
                 </div>
               );
             })}
@@ -433,6 +745,11 @@ function FieldInput({
           multiple={(field.maxSelect || 1) > 1}
           onChange={(event) => onChange(Array.from(event.target.files || []))}
         />
+        {(field.maxSelect || 1) === 1 && kept.length ? (
+          <p className="mt-1 text-[10px] text-muted-foreground">
+            Selecting a new file replaces the current file.
+          </p>
+        ) : null}
         {(value || []).length ? (
           <div className="mt-2 flex flex-wrap gap-2">
             {Array.from(value as File[]).map((file) => (
@@ -452,14 +769,7 @@ function FieldInput({
     return (
       <div className="sm:col-span-2">
         {label}
-        <Textarea
-          id={field.name}
-          name={field.name}
-          rows={8}
-          value={value || ""}
-          onChange={(event) => onChange(event.target.value)}
-          placeholder="HTML content"
-        />
+        <HtmlEditor field={field} value={value || ""} onChange={onChange} />
         {helper}
       </div>
     );
@@ -476,6 +786,9 @@ function FieldInput({
           value={value || ""}
           onChange={(event) => onChange(event.target.value)}
         />
+        <p className="mt-1 text-[10px] text-muted-foreground">
+          {localTimeZone()}
+        </p>
         {helper}
       </div>
     );
@@ -575,19 +888,53 @@ function RelationPicker({
   const [query, setQuery] = useState("");
   const [options, setOptions] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [draft, setDraft] = useState<Record<string, any>>({});
+  const [createBusy, setCreateBusy] = useState(false);
+  const [createError, setCreateError] = useState("");
+
+  const selectionKey = value.join(",");
+
+  useEffect(() => {
+    if (!selectionKey) return;
+    let cancelled = false;
+    Promise.all(
+      value.map((id) =>
+        pb.collection(target.name).getOne(id).catch(() => null),
+      ),
+    ).then((items) => {
+      if (cancelled) return;
+      const found = items.filter(Boolean) as any[];
+      if (!found.length) return;
+      setOptions((current) => {
+        const next = new Map(current.map((item) => [item.id, item]));
+        for (const item of found) next.set(item.id, item);
+        return Array.from(next.values());
+      });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectionKey, target.name]);
 
   useEffect(() => {
     if (!open) return;
     setLoading(true);
     pb.collection(target.name)
       .getList(1, 50, { sort: "-created" })
-      .then((result) => setOptions(result.items))
+      .then((result) => {
+        setOptions((current) => {
+          const next = new Map(result.items.map((item: any) => [item.id, item]));
+          for (const item of current) next.set(item.id, item);
+          return Array.from(next.values());
+        });
+      })
       .catch(() => setOptions([]))
       .finally(() => setLoading(false));
   }, [open, target.name]);
 
   const labelField =
-    target.fields.find((item) => ["name", "title", "email"].includes(item.name))?.name || "id";
+    target.fields.find((item) => ["title", "name", "email", "slug", "label"].includes(item.name))?.name || "id";
 
   const label = (id: string) => {
     const option = options.find((item) => item.id === id);
@@ -635,7 +982,9 @@ function RelationPicker({
           name={field.name}
           value={query}
           onFocus={() => setOpen(true)}
-          onBlur={() => setTimeout(() => setOpen(false), 160)}
+          onBlur={() => {
+            if (!creating) setTimeout(() => setOpen(false), 160);
+          }}
           onChange={(event) => {
             setQuery(event.target.value);
             setOpen(true);
@@ -666,8 +1015,126 @@ function RelationPicker({
           ) : (
             <p className="p-3 text-xs text-muted-foreground">No matches.</p>
           )}
+          <div className="border-t border-border p-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="w-full"
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => {
+                setCreating((current) => !current);
+                setCreateError("");
+                setOpen(true);
+              }}
+            >
+              <Plus />
+              {creating ? "Cancel new record" : `New ${target.name}`}
+            </Button>
+            {creating ? (
+              <div className="mt-2 space-y-2 border border-border p-2">
+                {quickFields(target).map((quickField) => (
+                  <div key={quickField.name}>
+                    <Label htmlFor={`quick-${quickField.name}`}>
+                      {quickField.name}
+                      {quickField.required ? <span className="ml-1 text-accent">*</span> : null}
+                    </Label>
+                    {quickField.type === "bool" ? (
+                      <input
+                        id={`quick-${quickField.name}`}
+                        type="checkbox"
+                        checked={Boolean(draft[quickField.name])}
+                        onChange={(event) =>
+                          setDraft((current) => ({ ...current, [quickField.name]: event.target.checked }))
+                        }
+                        className="h-4 w-4 accent-[hsl(var(--accent))]"
+                      />
+                    ) : quickField.type === "select" ? (
+                      <Select
+                        id={`quick-${quickField.name}`}
+                        value={draft[quickField.name] || ""}
+                        onChange={(event) =>
+                          setDraft((current) => ({ ...current, [quickField.name]: event.target.value }))
+                        }
+                      >
+                        <option value="">Choose…</option>
+                        {(quickField.values || []).map((option) => (
+                          <option key={option} value={option}>
+                            {option}
+                          </option>
+                        ))}
+                      </Select>
+                    ) : (
+                      <Input
+                        id={`quick-${quickField.name}`}
+                        type={quickField.type === "number" ? "number" : quickField.type === "email" ? "email" : "text"}
+                        value={draft[quickField.name] ?? ""}
+                        onChange={(event) =>
+                          setDraft((current) => ({
+                            ...current,
+                            [quickField.name]:
+                              quickField.type === "number" ? Number(event.target.value) : event.target.value,
+                          }))
+                        }
+                      />
+                    )}
+                  </div>
+                ))}
+                {!quickFields(target).length ? (
+                  <p className="text-[10px] text-muted-foreground">
+                    This collection has no simple fields. Open it to create a record.
+                  </p>
+                ) : null}
+                {createError ? <p className="text-[10px] text-destructive">{createError}</p> : null}
+                <Button
+                  size="sm"
+                  className="w-full"
+                  disabled={createBusy || !quickFields(target).length}
+                  onClick={async () => {
+                    setCreateBusy(true);
+                    setCreateError("");
+                    try {
+                      const payload: Record<string, any> = {};
+                      for (const quickField of quickFields(target)) {
+                        const value = draft[quickField.name];
+                        if (quickField.required && (value === "" || value === undefined || value === null)) {
+                          throw new Error(`${quickField.name} is required.`);
+                        }
+                        if (value !== undefined && value !== "") payload[quickField.name] = value;
+                      }
+                      const created = await pb.collection(target.name).create(payload);
+                      setOptions((current) => [created, ...current]);
+                      const multiple = (field.maxSelect || 1) > 1;
+                      onChange(multiple ? [...value, created.id].slice(0, field.maxSelect || 1) : [created.id]);
+                      setCreating(false);
+                      setDraft({});
+                      setQuery("");
+                      setOpen(false);
+                      toast.success(`${target.name} record created.`);
+                    } catch (err) {
+                      setCreateError(errorMessage(err));
+                    } finally {
+                      setCreateBusy(false);
+                    }
+                  }}
+                >
+                  {createBusy ? "Creating…" : "Create and select"}
+                </Button>
+              </div>
+            ) : null}
+          </div>
         </div>
       ) : null}
     </div>
   );
+}
+
+function quickFields(target: Collection): Field[] {
+  return target.fields
+    .filter(
+      (field) =>
+        !field.system &&
+        !field.hidden &&
+        !["autodate", "password", "file", "relation", "json", "editor"].includes(field.type),
+    )
+    .slice(0, 6);
 }

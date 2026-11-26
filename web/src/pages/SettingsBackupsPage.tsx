@@ -34,18 +34,25 @@ export function SettingsBackupsPage() {
   const [restoreAt, setRestoreAt] = useState("");
   const [restoreStatus, setRestoreStatus] = useState<any>(null);
   const [vacuum, setVacuum] = useState<any>(null);
+  const [settings, setSettings] = useState<any>(null);
+  const [backupCron, setBackupCron] = useState("");
+  const [cronMaxKeep, setCronMaxKeep] = useState("0");
 
   async function load() {
     setLoading(true);
     try {
-      const [list, restore, vac] = await Promise.all([
+      const [list, restore, vac, settingsValue] = await Promise.all([
         pb.backups.getFullList(),
         pb.send("/api/_c/restore/v1", {}).catch(() => null),
         pb.send("/api/_c/vacuum/v1", {}).catch(() => null),
+        pb.settings.getAll().catch(() => null),
       ]);
       setBackups((list as Backup[]).sort((a, b) => (a.modified < b.modified ? 1 : -1)));
       setRestoreStatus(restore);
       setVacuum(vac);
+      setSettings(settingsValue);
+      setBackupCron(settingsValue?.backups?.cron || "");
+      setCronMaxKeep(String(settingsValue?.backups?.cronMaxKeep || 0));
     } catch (err) {
       toast.error(errorMessage(err));
     } finally {
@@ -101,6 +108,22 @@ export function SettingsBackupsPage() {
     }
   }
 
+  async function saveSchedule() {
+    if (!settings) return;
+    setBusy(true);
+    try {
+      const updated = await pb.settings.update({
+        backups: { ...settings.backups, cron: backupCron, cronMaxKeep: Number(cronMaxKeep) || 0 },
+      });
+      setSettings(updated);
+      toast.success("Backup schedule saved.");
+    } catch (err) {
+      toast.error(errorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function restoreToMoment() {
     if (!restoreAt) return;
     if (!window.confirm(`Restore the app to ${restoreAt}? The app restarts and later changes are replaced.`)) return;
@@ -133,6 +156,43 @@ export function SettingsBackupsPage() {
       />
 
       <PageBody className="space-y-5">
+        <div className="grid gap-3 sm:grid-cols-3">
+          <Info label="Backups" value={String(backups.length)} />
+          <Info label="Total size" value={formatBytes(backups.reduce((sum, item) => sum + (item.size || 0), 0))} />
+          <Info label="Latest" value={backups[0] ? formatDate(backups[0].modified) : "Never"} />
+        </div>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Automatic backups</CardTitle>
+            <CardDescription>Set a cron expression and how many scheduled backups to keep.</CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-wrap items-end gap-3">
+            <div className="min-w-[240px] flex-1">
+              <Label htmlFor="backup-cron">Cron expression</Label>
+              <Input
+                id="backup-cron"
+                value={backupCron}
+                onChange={(event) => setBackupCron(event.target.value)}
+                placeholder="0 3 * * *"
+              />
+            </div>
+            <div className="w-[180px]">
+              <Label htmlFor="backup-keep">Keep scheduled backups</Label>
+              <Input
+                id="backup-keep"
+                type="number"
+                min={0}
+                value={cronMaxKeep}
+                onChange={(event) => setCronMaxKeep(event.target.value)}
+              />
+            </div>
+            <Button onClick={saveSchedule} disabled={busy}>
+              Save schedule
+            </Button>
+          </CardContent>
+        </Card>
+
         <Card>
           <CardHeader>
             <CardTitle>Create backup</CardTitle>
@@ -245,6 +305,12 @@ export function SettingsBackupsPage() {
                 <p className="text-xs text-muted-foreground">
                   Window: {formatDate(restoreStatus.window.earliest)} → {formatDate(restoreStatus.window.latest)}
                 </p>
+              ) : null}
+              {restoreAt ? (
+                <div className="basis-full border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-700 dark:text-amber-400">
+                  Restore preview: the app will restart and data after {formatDate(restoreAt)} will be replaced. Take
+                  a manual backup first if you may need the current state.
+                </div>
               ) : null}
             </CardContent>
           </Card>

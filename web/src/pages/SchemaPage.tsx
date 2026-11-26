@@ -41,6 +41,7 @@ export function SchemaPage() {
           </div>
         ) : (
           <>
+            <RelationGraph collections={userCollections} byId={byId} />
             <CollectionGroup title="Collections" collections={userCollections} byId={byId} />
             <CollectionGroup title="System" collections={systemCollections} byId={byId} />
             {!collections.length ? (
@@ -52,6 +53,126 @@ export function SchemaPage() {
         )}
       </PageBody>
     </>
+  );
+}
+
+function RelationGraph({
+  collections,
+  byId,
+}: {
+  collections: Collection[];
+  byId: Map<string, Collection>;
+}) {
+  const nodes = collections.slice(0, 24);
+  if (!nodes.length) return null;
+
+  const columns = 3;
+  const nodeWidth = 220;
+  const nodeHeight = 118;
+  const gapX = 70;
+  const gapY = 54;
+  const positions = new Map(
+    nodes.map((collection, index) => [
+      collection.id,
+      {
+        x: (index % columns) * (nodeWidth + gapX),
+        y: Math.floor(index / columns) * (nodeHeight + gapY),
+      },
+    ]),
+  );
+  const rows = Math.ceil(nodes.length / columns);
+  const width = columns * nodeWidth + (columns - 1) * gapX;
+  const height = rows * nodeHeight + (rows - 1) * gapY;
+
+  const edges = nodes.flatMap((collection) =>
+    collection.fields
+      .filter((field) => field.type === "relation" && field.collectionId)
+      .map((field) => ({
+        from: collection,
+        to: byId.get(field.collectionId!),
+        field: field.name,
+      }))
+      .filter((edge) => edge.to && positions.has(edge.to.id)),
+  );
+
+  return (
+    <Card>
+      <CardHeader className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <CardTitle>Relation graph</CardTitle>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Arrows point from the collection that owns the relation field to its target.
+          </p>
+        </div>
+        <Badge variant="outline">{edges.length} relations</Badge>
+      </CardHeader>
+      <CardContent className="overflow-auto scrollbar-thin">
+        <div className="relative" style={{ width, height }}>
+          <svg className="pointer-events-none absolute inset-0" width={width} height={height}>
+            <defs>
+              <marker id="relation-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor" className="text-accent" />
+              </marker>
+            </defs>
+            {edges.map((edge, index) => {
+              const from = positions.get(edge.from.id)!;
+              const to = positions.get(edge.to!.id)!;
+              const x1 = from.x + nodeWidth;
+              const y1 = from.y + nodeHeight / 2;
+              const x2 = to.x;
+              const y2 = to.y + nodeHeight / 2;
+              const mid = (x1 + x2) / 2;
+              const same = from.y === to.y;
+              const d = same
+                ? `M ${x1} ${y1} C ${mid} ${y1}, ${mid} ${y2}, ${x2} ${y2}`
+                : `M ${x1} ${y1} C ${x1 + 60} ${y1}, ${x2 - 60} ${y2}, ${x2} ${y2}`;
+              return (
+                <g key={`${edge.from.id}-${edge.to!.id}-${edge.field}-${index}`}>
+                  <path
+                    d={d}
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth={1.5}
+                    strokeDasharray="4 3"
+                    className="text-accent/70"
+                    markerEnd="url(#relation-arrow)"
+                  />
+                  <text x={mid} y={(y1 + y2) / 2 - 4} textAnchor="middle" className="fill-muted-foreground font-mono text-[8px]">
+                    {edge.field}
+                  </text>
+                </g>
+              );
+            })}
+          </svg>
+          {nodes.map((collection) => {
+            const position = positions.get(collection.id)!;
+            const relations = collection.fields.filter((field) => field.type === "relation");
+            return (
+              <Link
+                key={collection.id}
+                to="/collections"
+                search={{ collection: collection.name }}
+                className="absolute block border-2 border-foreground bg-card p-3 transition-colors hover:border-accent"
+                style={{ left: position.x, top: position.y, width: nodeWidth, height: nodeHeight }}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="truncate font-mono text-[11px] font-bold uppercase tracking-[0.08em]">
+                    {collection.name}
+                  </span>
+                  <Badge variant={collection.type === "auth" ? "accent" : "outline"}>{collection.type}</Badge>
+                </div>
+                <p className="mt-1 font-mono text-[9px] text-muted-foreground">
+                  {collection.fields.length} fields · {relations.length} relations
+                </p>
+                <p className="mt-2 line-clamp-3 text-[10px] text-muted-foreground">
+                  {collection.fields.slice(0, 6).map((field) => field.name).join(", ")}
+                </p>
+              </Link>
+            );
+          })}
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 

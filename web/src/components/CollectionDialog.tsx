@@ -12,10 +12,18 @@ type Field = {
   required?: boolean;
   system?: boolean;
   hidden?: boolean;
+  presentable?: boolean;
   values?: string[];
   maxSelect?: number;
   collectionId?: string;
   protected?: boolean;
+  min?: number;
+  max?: number;
+  pattern?: string;
+  autogeneratePattern?: string;
+  onlyInt?: boolean;
+  mimeTypes?: string[];
+  thumbs?: string[];
   options?: Json;
 };
 
@@ -34,9 +42,13 @@ type Collection = {
   deleteRule?: string | null;
   authRule?: string | null;
   manageRule?: string | null;
-  passwordAuth?: { enabled?: boolean };
-  otp?: { enabled?: boolean };
-  mfa?: { enabled?: boolean };
+  passwordAuth?: { enabled?: boolean; identityFields?: string[] };
+  otp?: { enabled?: boolean; duration?: number; length?: number; emailTemplate?: Json };
+  mfa?: { enabled?: boolean; duration?: number; rule?: string };
+  authToken?: { duration?: number; secret?: string };
+  passwordResetToken?: { duration?: number; secret?: string };
+  emailChangeToken?: { duration?: number; secret?: string };
+  verificationToken?: { duration?: number; secret?: string };
   oauth2?: { enabled?: boolean; providers?: any[] };
   indexes?: string[];
   viewQuery?: string;
@@ -99,9 +111,26 @@ export function CollectionDialog({
   const [rules, setRules] = useState<Record<string, Rule>>({});
   const [authRule, setAuthRule] = useState<Rule>({ mode: "locked", expr: "" });
   const [manageRule, setManageRule] = useState<Rule>({ mode: "locked", expr: "" });
-  const [passwordAuth, setPasswordAuth] = useState({ enabled: true });
-  const [otp, setOtp] = useState({ enabled: false });
-  const [mfa, setMfa] = useState({ enabled: false });
+  const [passwordAuth, setPasswordAuth] = useState<{ enabled: boolean; identityFields: string[] }>({
+    enabled: true,
+    identityFields: [],
+  });
+  const [otp, setOtp] = useState<{ enabled: boolean; duration: number; length: number; emailTemplate?: Json }>({
+    enabled: false,
+    duration: 180,
+    length: 8,
+  });
+  const [mfa, setMfa] = useState<{ enabled: boolean; duration: number; rule: string }>({
+    enabled: false,
+    duration: 1800,
+    rule: "",
+  });
+  const [tokens, setTokens] = useState<Record<string, any>>({
+    authToken: { duration: 1209600 },
+    passwordResetToken: { duration: 1800 },
+    emailChangeToken: { duration: 1800 },
+    verificationToken: { duration: 604800 },
+  });
   const [oauth2, setOauth2] = useState<{ enabled: boolean; providers: any[] }>({
     enabled: false,
     providers: [],
@@ -109,6 +138,9 @@ export function CollectionDialog({
   const [providersJSON, setProvidersJSON] = useState("[]");
   const [indexes, setIndexes] = useState<string[]>([]);
   const [viewQuery, setViewQuery] = useState("");
+  const [viewPreview, setViewPreview] = useState<{ columns?: { name: string }[]; rows?: any[][] } | null>(null);
+  const [viewError, setViewError] = useState("");
+  const [previewing, setPreviewing] = useState(false);
   const [busy, setBusy] = useState(false);
   const [baseline, setBaseline] = useState("");
 
@@ -128,9 +160,36 @@ export function CollectionDialog({
     for (const [key] of RULES) initialRules[key] = toRule((collection as any)?.[key]);
     const initialAuthRule = toRule(collection?.authRule);
     const initialManageRule = toRule(collection?.manageRule);
-    const initialPasswordAuth = { enabled: collection?.passwordAuth?.enabled !== false };
-    const initialOtp = { enabled: Boolean(collection?.otp?.enabled) };
-    const initialMfa = { enabled: Boolean(collection?.mfa?.enabled) };
+    const initialPasswordAuth = {
+      enabled: collection?.passwordAuth?.enabled !== false,
+      identityFields: collection?.passwordAuth?.identityFields || [],
+    };
+    const initialOtp = {
+      enabled: Boolean(collection?.otp?.enabled),
+      duration: collection?.otp?.duration || 180,
+      length: collection?.otp?.length || 8,
+      emailTemplate: collection?.otp?.emailTemplate,
+    };
+    const initialMfa = {
+      enabled: Boolean(collection?.mfa?.enabled),
+      duration: collection?.mfa?.duration || 1800,
+      rule: collection?.mfa?.rule || "",
+    };
+    const initialTokens = {
+      authToken: { ...(collection?.authToken || {}), duration: collection?.authToken?.duration || 1209600 },
+      passwordResetToken: {
+        ...(collection?.passwordResetToken || {}),
+        duration: collection?.passwordResetToken?.duration || 1800,
+      },
+      emailChangeToken: {
+        ...(collection?.emailChangeToken || {}),
+        duration: collection?.emailChangeToken?.duration || 1800,
+      },
+      verificationToken: {
+        ...(collection?.verificationToken || {}),
+        duration: collection?.verificationToken?.duration || 604800,
+      },
+    };
     const initialOauth2 = {
       enabled: Boolean(collection?.oauth2?.enabled),
       providers: collection?.oauth2?.providers || [],
@@ -149,10 +208,13 @@ export function CollectionDialog({
     setPasswordAuth(initialPasswordAuth);
     setOtp(initialOtp);
     setMfa(initialMfa);
+    setTokens(initialTokens);
     setOauth2(initialOauth2);
     setProvidersJSON(initialProvidersJSON);
     setIndexes(initialIndexes);
     setViewQuery(initialViewQuery);
+    setViewPreview(null);
+    setViewError("");
     setBaseline(
       JSON.stringify({
         name: initialName,
@@ -164,6 +226,7 @@ export function CollectionDialog({
         passwordAuth: initialPasswordAuth,
         otp: initialOtp,
         mfa: initialMfa,
+        tokens: initialTokens,
         oauth2: initialOauth2,
         providersJSON: initialProvidersJSON,
         indexes: initialIndexes,
@@ -187,6 +250,7 @@ export function CollectionDialog({
         passwordAuth,
         otp,
         mfa,
+        tokens,
         oauth2,
         providersJSON,
         indexes,
@@ -201,6 +265,31 @@ export function CollectionDialog({
     () => Object.entries(rules).filter(([, rule]) => rule.mode === "public").map(([key]) => key),
     [rules],
   );
+
+  const oauthProviders = useMemo<any[]>(() => {
+    try {
+      const parsed = providersJSON.trim() ? JSON.parse(providersJSON) : [];
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }, [providersJSON]);
+
+  function updateProvider(index: number, patch: Record<string, any>) {
+    const next = oauthProviders.map((provider, position) =>
+      position === index ? { ...provider, ...patch } : provider,
+    );
+    setProvidersJSON(JSON.stringify(next, null, 2));
+  }
+
+  function addProvider() {
+    const next = [...oauthProviders, { name: "", clientId: "", clientSecret: "" }];
+    setProvidersJSON(JSON.stringify(next, null, 2));
+  }
+
+  function removeProvider(index: number) {
+    setProvidersJSON(JSON.stringify(oauthProviders.filter((_, position) => position !== index), null, 2));
+  }
 
   function updateField(index: number, patch: Partial<Field>) {
     setFields((current) =>
@@ -217,6 +306,69 @@ export function CollectionDialog({
       ...current,
       { name: "", type: "text", required: false, values: [], maxSelect: 1 },
     ]);
+  }
+
+  function schemaDiff() {
+    if (!isEdit) return "";
+    const original = (collection?.fields || []).filter(
+      (field) => !SYSTEM_FIELDS.has(field.name) && !field.system,
+    );
+    const current = new Map(fields.map((field) => [field.id || field.name, field]));
+    const previous = new Map(original.map((field) => [field.id || field.name, field]));
+    const lines: string[] = [];
+    for (const [key, field] of current) {
+      const old = previous.get(key);
+      if (!old) {
+        lines.push(`+ add field ${field.name} (${field.type})`);
+        continue;
+      }
+      const changed = ["name", "type", "required", "min", "max", "pattern", "hidden", "presentable"]
+        .filter((property) => JSON.stringify((old as any)[property]) !== JSON.stringify((field as any)[property]));
+      if (changed.length) lines.push(`~ change ${field.name}: ${changed.join(", ")}`);
+    }
+    for (const [key, field] of previous) {
+      if (!current.has(key)) lines.push(`- remove field ${field.name} (${field.type})`);
+    }
+    return lines.join("\n");
+  }
+
+  function validIndex(value: string) {
+    return /^create\s+(unique\s+)?index\s+/i.test(value.trim()) && /\son\s+/i.test(value);
+  }
+
+  function suggestIndexes() {
+    const matches: string[] = [];
+    for (const field of fields) {
+      if (!["text", "email", "url", "date", "number", "bool"].includes(field.type)) continue;
+      if (!/name|email|slug|code|status|created|updated/i.test(field.name)) continue;
+      const exists = indexes.some((index) => index.includes(`(${field.name})`) || index.includes(`(${field.name},`));
+      if (!exists) {
+        matches.push(`CREATE INDEX idx_${(name || "collection").replace(/[^a-z0-9_]/gi, "_")}_${field.name} ON ${name || "collection"} (${field.name})`);
+      }
+    }
+    if (!matches.length) {
+      toast.message("No obvious index suggestions.");
+      return;
+    }
+    setIndexes((current) => [...current, ...matches]);
+  }
+
+  async function previewView() {
+    if (!viewQuery.trim()) return;
+    setPreviewing(true);
+    setViewError("");
+    try {
+      const result = await pb.send("/api/collections/meta/dry-run-view", {
+        method: "POST",
+        body: { query: viewQuery },
+      });
+      setViewPreview(result);
+    } catch (err) {
+      setViewPreview(null);
+      setViewError(errorMessage(err));
+    } finally {
+      setPreviewing(false);
+    }
   }
 
   async function submit(event: React.FormEvent) {
@@ -252,6 +404,23 @@ export function CollectionDialog({
         next.collectionId = field.collectionId || "";
         next.maxSelect = Math.max(1, Number(field.maxSelect) || 1);
       }
+      if (field.hidden) next.hidden = true;
+      if (field.presentable) next.presentable = true;
+      if (["text", "email", "url", "editor"].includes(field.type)) {
+        if (field.min) next.min = Number(field.min);
+        if (field.max) next.max = Number(field.max);
+        if (field.pattern?.trim()) next.pattern = field.pattern.trim();
+        if (field.autogeneratePattern?.trim()) next.autogeneratePattern = field.autogeneratePattern.trim();
+      }
+      if (field.type === "number") {
+        if (field.min !== undefined && field.min !== null) next.min = Number(field.min);
+        if (field.max !== undefined && field.max !== null) next.max = Number(field.max);
+        if (field.onlyInt) next.onlyInt = true;
+      }
+      if (field.type === "file") {
+        next.mimeTypes = (field.mimeTypes || []).filter(Boolean);
+        next.thumbs = (field.thumbs || []).filter(Boolean);
+      }
       return next;
     });
 
@@ -276,6 +445,17 @@ export function CollectionDialog({
       }
     }
 
+    const invalidIndex = indexes.map((item) => item.trim()).filter(Boolean).find((item) => !validIndex(item));
+    if (invalidIndex) {
+      toast.error(`Invalid index: ${invalidIndex}`);
+      return;
+    }
+
+    const changes = schemaDiff();
+    if (changes && !window.confirm(`Apply these schema changes?\n\n${changes}`)) {
+      return;
+    }
+
     const payload: Json = {
       name: name.trim(),
       type,
@@ -293,6 +473,10 @@ export function CollectionDialog({
       payload.passwordAuth = passwordAuth;
       payload.otp = otp;
       payload.mfa = mfa;
+      payload.authToken = tokens.authToken;
+      payload.passwordResetToken = tokens.passwordResetToken;
+      payload.emailChangeToken = tokens.emailChangeToken;
+      payload.verificationToken = tokens.verificationToken;
       let providers: any[] = [];
       try {
         providers = providersJSON.trim() ? JSON.parse(providersJSON) : [];
@@ -497,6 +681,125 @@ export function CollectionDialog({
                       </div>
                     </div>
                   ) : null}
+
+                  {["text", "email", "url", "editor"].includes(field.type) ? (
+                    <div className="grid gap-2 sm:col-span-4 sm:grid-cols-4">
+                      <div>
+                        <Label>Min length</Label>
+                        <Input
+                          type="number"
+                          min={0}
+                          value={field.min ?? ""}
+                          onChange={(event) => updateField(index, { min: Number(event.target.value) })}
+                        />
+                      </div>
+                      <div>
+                        <Label>Max length</Label>
+                        <Input
+                          type="number"
+                          min={0}
+                          value={field.max ?? ""}
+                          onChange={(event) => updateField(index, { max: Number(event.target.value) })}
+                        />
+                      </div>
+                      <div className="sm:col-span-2">
+                        <Label>Pattern</Label>
+                        <Input
+                          value={field.pattern || ""}
+                          onChange={(event) => updateField(index, { pattern: event.target.value })}
+                          placeholder="^[a-z0-9-]+$"
+                        />
+                      </div>
+                      <div className="sm:col-span-2">
+                        <Label>Autogenerate pattern</Label>
+                        <Input
+                          value={field.autogeneratePattern || ""}
+                          onChange={(event) => updateField(index, { autogeneratePattern: event.target.value })}
+                          placeholder="[a-z0-9]{15}"
+                        />
+                      </div>
+                    </div>
+                  ) : null}
+
+                  {field.type === "number" ? (
+                    <div className="grid gap-2 sm:col-span-4 sm:grid-cols-3">
+                      <div>
+                        <Label>Min</Label>
+                        <Input
+                          type="number"
+                          value={field.min ?? ""}
+                          onChange={(event) => updateField(index, { min: Number(event.target.value) })}
+                        />
+                      </div>
+                      <div>
+                        <Label>Max</Label>
+                        <Input
+                          type="number"
+                          value={field.max ?? ""}
+                          onChange={(event) => updateField(index, { max: Number(event.target.value) })}
+                        />
+                      </div>
+                      <label className="flex items-end gap-2 pb-2 font-mono text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
+                        <input
+                          type="checkbox"
+                          checked={Boolean(field.onlyInt)}
+                          onChange={(event) => updateField(index, { onlyInt: event.target.checked })}
+                          className="h-4 w-4 accent-[hsl(var(--accent))]"
+                        />
+                        Integer only
+                      </label>
+                    </div>
+                  ) : null}
+
+                  {field.type === "file" ? (
+                    <div className="grid gap-2 sm:col-span-4 sm:grid-cols-2">
+                      <div>
+                        <Label>Allowed MIME types</Label>
+                        <Input
+                          value={(field.mimeTypes || []).join(", ")}
+                          onChange={(event) =>
+                            updateField(index, {
+                              mimeTypes: event.target.value.split(",").map((item) => item.trim()).filter(Boolean),
+                            })
+                          }
+                          placeholder="image/*, application/pdf"
+                        />
+                      </div>
+                      <div>
+                        <Label>Thumbs</Label>
+                        <Input
+                          value={(field.thumbs || []).join(", ")}
+                          onChange={(event) =>
+                            updateField(index, {
+                              thumbs: event.target.value.split(",").map((item) => item.trim()).filter(Boolean),
+                            })
+                          }
+                          placeholder="100x100, 300x300"
+                        />
+                      </div>
+                    </div>
+                  ) : null}
+
+                  <div className="flex flex-wrap gap-4 sm:col-span-4">
+                    <label className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
+                      <input
+                        type="checkbox"
+                        checked={Boolean(field.presentable)}
+                        onChange={(event) => updateField(index, { presentable: event.target.checked })}
+                        className="h-4 w-4 accent-[hsl(var(--accent))]"
+                      />
+                      Presentable
+                    </label>
+                    <label className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
+                      <input
+                        type="checkbox"
+                        checked={Boolean(field.hidden)}
+                        onChange={(event) => updateField(index, { hidden: event.target.checked })}
+                        className="h-4 w-4 accent-[hsl(var(--accent))]"
+                      />
+                      Hidden
+                    </label>
+                  </div>
                 </div>
               ))}
               {fields.length === 0 ? (
@@ -548,16 +851,128 @@ export function CollectionDialog({
               <Toggle label="MFA" checked={mfa.enabled} onChange={(enabled) => setMfa({ ...mfa, enabled })} />
             </div>
 
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div>
+                <Label>Password identity fields</Label>
+                <Input
+                  value={passwordAuth.identityFields.join(", ")}
+                  onChange={(event) =>
+                    setPasswordAuth({
+                      ...passwordAuth,
+                      identityFields: event.target.value.split(",").map((item) => item.trim()).filter(Boolean),
+                    })
+                  }
+                  placeholder="email"
+                />
+              </div>
+              <div>
+                <Label>MFA rule</Label>
+                <Input
+                  value={mfa.rule}
+                  onChange={(event) => setMfa({ ...mfa, rule: event.target.value })}
+                  placeholder="@request.auth.id != ''"
+                />
+              </div>
+              <div>
+                <Label>OTP duration (seconds)</Label>
+                <Input
+                  type="number"
+                  min={10}
+                  value={otp.duration}
+                  onChange={(event) => setOtp({ ...otp, duration: Number(event.target.value) })}
+                />
+              </div>
+              <div>
+                <Label>OTP length</Label>
+                <Input
+                  type="number"
+                  min={4}
+                  value={otp.length}
+                  onChange={(event) => setOtp({ ...otp, length: Number(event.target.value) })}
+                />
+              </div>
+              <div>
+                <Label>MFA duration (seconds)</Label>
+                <Input
+                  type="number"
+                  min={10}
+                  value={mfa.duration}
+                  onChange={(event) => setMfa({ ...mfa, duration: Number(event.target.value) })}
+                />
+              </div>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              {[
+                ["authToken", "Auth token"],
+                ["passwordResetToken", "Password reset token"],
+                ["emailChangeToken", "Email change token"],
+                ["verificationToken", "Verification token"],
+              ].map(([key, label]) => (
+                <div key={key}>
+                  <Label>{label} duration (seconds)</Label>
+                  <Input
+                    type="number"
+                    min={10}
+                    value={tokens[key]?.duration || 0}
+                    onChange={(event) =>
+                      setTokens((current) => ({
+                        ...current,
+                        [key]: { ...current[key], duration: Number(event.target.value) },
+                      }))
+                    }
+                  />
+                </div>
+              ))}
+            </div>
+
             <div className="border border-border p-3">
-              <Toggle
-                label="OAuth2"
-                checked={oauth2.enabled}
-                onChange={(enabled) => setOauth2({ ...oauth2, enabled })}
-              />
+              <div className="flex items-center justify-between gap-3">
+                <Toggle
+                  label="OAuth2"
+                  checked={oauth2.enabled}
+                  onChange={(enabled) => setOauth2({ ...oauth2, enabled })}
+                />
+                <Button variant="outline" size="sm" onClick={addProvider}>
+                  <Plus />
+                  Add provider
+                </Button>
+              </div>
+              <div className="mt-3 space-y-2">
+                {oauthProviders.map((provider, index) => (
+                  <div key={index} className="grid gap-2 border border-border p-3 sm:grid-cols-2">
+                    {[
+                      ["name", "Provider", "github"],
+                      ["clientId", "Client ID", ""],
+                      ["clientSecret", "Client secret", ""],
+                      ["displayName", "Display name", ""],
+                      ["authURL", "Auth URL", ""],
+                      ["tokenURL", "Token URL", ""],
+                      ["userInfoURL", "User info URL", ""],
+                    ].map(([key, label, placeholder]) => (
+                      <div key={key}>
+                        <Label>{label}</Label>
+                        <Input
+                          type={key === "clientSecret" ? "password" : "text"}
+                          value={provider[key] || ""}
+                          placeholder={placeholder}
+                          onChange={(event) => updateProvider(index, { [key]: event.target.value })}
+                        />
+                      </div>
+                    ))}
+                    <div className="sm:col-span-2">
+                      <Button variant="ghost" size="sm" onClick={() => removeProvider(index)}>
+                        <Trash2 />
+                        Remove provider
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
               <div className="mt-3">
-                <Label>OAuth2 providers (JSON array)</Label>
+                <Label>OAuth2 providers (advanced JSON)</Label>
                 <Textarea
-                  rows={10}
+                  rows={8}
                   className="font-mono"
                   value={providersJSON}
                   onChange={(event) => setProvidersJSON(event.target.value)}
@@ -574,24 +989,36 @@ export function CollectionDialog({
               <p className="text-xs text-muted-foreground">
                 SQLite index definitions. Use <code>CREATE INDEX ...</code> or <code>CREATE UNIQUE INDEX ...</code>.
               </p>
-              <Button variant="outline" size="sm" onClick={() => setIndexes((current) => [...current, ""])}>
-                <Plus />
-                Add index
-              </Button>
+              <div className="flex gap-2">
+                <Button variant="outline" size="sm" onClick={suggestIndexes}>
+                  Suggest
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => setIndexes((current) => [...current, ""])}>
+                  <Plus />
+                  Add index
+                </Button>
+              </div>
             </div>
             {indexes.map((index, position) => (
               <div key={position} className="flex items-start gap-2">
-                <Textarea
-                  rows={3}
-                  className="font-mono"
-                  value={index}
-                  onChange={(event) =>
-                    setIndexes((current) =>
-                      current.map((item, indexPosition) => (indexPosition === position ? event.target.value : item)),
-                    )
-                  }
-                  placeholder={`CREATE UNIQUE INDEX idx_${name || "collection"}_field ON ${name || "collection"} (field)`}
-                />
+                <div className="flex-1">
+                  <Textarea
+                    rows={3}
+                    className={`font-mono ${index.trim() && !validIndex(index) ? "border-destructive" : ""}`}
+                    value={index}
+                    onChange={(event) =>
+                      setIndexes((current) =>
+                        current.map((item, indexPosition) => (indexPosition === position ? event.target.value : item)),
+                      )
+                    }
+                    placeholder={`CREATE UNIQUE INDEX idx_${name || "collection"}_field ON ${name || "collection"} (field)`}
+                  />
+                  {index.trim() && !validIndex(index) ? (
+                    <p className="mt-1 text-[10px] text-destructive">
+                      Use CREATE INDEX ... ON table (column).
+                    </p>
+                  ) : null}
+                </div>
                 <Button
                   variant="ghost"
                   size="icon"
@@ -620,9 +1047,48 @@ export function CollectionDialog({
               onChange={(event) => setViewQuery(event.target.value)}
               placeholder="SELECT id, title FROM posts WHERE published = 1"
             />
-            <p className="mt-1 text-xs text-muted-foreground">
-              A read-only SELECT query. PocketBase derives the fields from the result columns.
-            </p>
+            <div className="mt-2 flex items-center justify-between gap-2">
+              <p className="text-xs text-muted-foreground">
+                A read-only SELECT query. PocketBase derives the fields from the result columns.
+              </p>
+              <Button variant="outline" size="sm" onClick={previewView} disabled={previewing || !viewQuery.trim()}>
+                {previewing ? "Previewing…" : "Preview"}
+              </Button>
+            </div>
+            {viewError ? (
+              <div className="mt-3 border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                {viewError}
+              </div>
+            ) : null}
+            {viewPreview ? (
+              <div className="mt-3 overflow-auto border border-border">
+                <table className="w-full text-xs">
+                  <thead className="bg-muted/30 font-mono text-[9px] uppercase tracking-[0.12em] text-muted-foreground">
+                    <tr>
+                      {(viewPreview.columns || []).map((column) => (
+                        <th key={column.name} className="px-3 py-2 text-left">
+                          {column.name}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(viewPreview.rows || []).map((row, rowIndex) => (
+                      <tr key={rowIndex} className="border-t border-border">
+                        {row.map((value, valueIndex) => (
+                          <td key={valueIndex} className="max-w-[220px] truncate px-3 py-2 font-mono text-[10px]">
+                            {String(value ?? "")}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {!viewPreview.rows?.length ? (
+                  <p className="px-3 py-4 text-xs text-muted-foreground">Query returned no rows.</p>
+                ) : null}
+              </div>
+            ) : null}
           </div>
         ) : null}
       </form>

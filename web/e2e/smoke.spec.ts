@@ -4,6 +4,12 @@ import { createCollection, login } from "./helpers";
 test("login and command palette", async ({ page }) => {
   await login(page);
   await expect(page.getByRole("heading", { name: "Overview" })).toBeVisible();
+  const authKeys = await page.evaluate(() => ({
+    current: localStorage.getItem("ekiliebox_auth"),
+    legacy: localStorage.getItem("pocketbase_auth"),
+  }));
+  expect(authKeys.current).toBeTruthy();
+  expect(authKeys.legacy).toBeNull();
 
   await page.keyboard.press("Control+k");
   const search = page.getByRole("textbox", { name: "Search pages, collections, actions and records" });
@@ -102,5 +108,60 @@ test("create, run and delete a scheduled HTTP request", async ({ page }) => {
 
   page.once("dialog", (dialog) => dialog.accept());
   await page.getByRole("button", { name: `Delete ${name}` }).click();
-  await expect(page.getByRole("row", { name: new RegExp(name) })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: `Run ${name} now` })).toHaveCount(0);
+});
+
+test("docs, observability, status, audit, auth and schema pages", async ({ page }) => {
+  await login(page);
+
+  const pages = [
+    ["/api-docs", "API docs"],
+    ["/observability", "Observability"],
+    ["/status", "Status"],
+    ["/audit", "Audit log"],
+    ["/auth", "Auth"],
+    ["/schema", "Schema"],
+  ] as const;
+
+  for (const [path, heading] of pages) {
+    await page.goto(path);
+    await expect(page.getByRole("heading", { name: heading })).toBeVisible();
+  }
+
+  await page.goto("/schema");
+  await expect(page.getByText("Relation graph")).toBeVisible();
+  await page.goto("/observability");
+  await expect(page.getByText("Requests", { exact: true })).toBeVisible();
+  await page.goto("/api-docs");
+  await expect(page.getByText("Authentication", { exact: true })).toBeVisible();
+});
+
+test("auth collection settings expose token durations and save safely", async ({ page }) => {
+  await login(page);
+  await page.goto("/collections?collection=users");
+  await page.getByRole("button", { name: "Settings" }).click();
+  await page.getByRole("tab", { name: "Auth options" }).click();
+  await expect(page.getByText("Auth token duration (seconds)")).toBeVisible();
+  await expect(page.getByText("OTP duration (seconds)")).toBeVisible();
+  await page.getByRole("button", { name: "Save collection" }).click();
+  await expect(page.getByRole("dialog")).toBeHidden();
+});
+
+test("record editor autosaves an existing record", async ({ page }) => {
+  await login(page);
+  const name = `e2e_autosave_${Date.now()}`;
+  await createCollection(page, name);
+  await page.getByRole("button", { name: new RegExp(name) }).first().click();
+  await page.getByRole("button", { name: "New record" }).first().click();
+  await page.locator("#title").fill("Before autosave");
+  await page.getByRole("button", { name: "Create record" }).click();
+  await expect(page.getByRole("dialog")).toBeHidden();
+
+  await page.getByRole("button", { name: "Edit record" }).first().click();
+  await page.getByLabel(/Autosave changes/).check();
+  await page.locator("#title").fill("After autosave");
+  await page.waitForTimeout(2200);
+  await page.getByRole("button", { name: "Cancel" }).click();
+  await expect(page.getByRole("dialog")).toBeHidden();
+  await expect(page.getByRole("button", { name: "Edit title inline" })).toContainText("After autosave");
 });

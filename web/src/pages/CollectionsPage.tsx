@@ -48,6 +48,7 @@ import {
 } from "@/lib/collectionViews";
 import { pb, errorMessage } from "@/lib/pb";
 import { cn, displayValue, formatDate } from "@/lib/utils";
+import { toLocalDateTime } from "@/lib/date";
 
 type Field = {
   name: string;
@@ -79,7 +80,7 @@ type CollectionsSearch = {
 
 const PER_PAGE = 30;
 const SYSTEM_COLUMNS = new Set(["id", "collectionId", "collectionName", "expand"]);
-const INTERNAL_COLLECTIONS = new Set(["_ekilie_scheduled_requests"]);
+const INTERNAL_COLLECTIONS = new Set(["_ekilie_scheduled_requests", "_ekilie_scheduled_runs"]);
 
 export function CollectionsPage() {
   const search = useSearch({ strict: false }) as CollectionsSearch;
@@ -183,7 +184,7 @@ export function CollectionsPage() {
     }
     const found = records.find((item) => item.id === recordParam);
     if (found) {
-      setEditingRecord(found);
+      setEditingRecord((current) => (current?.id === found.id ? current : found));
       setSheetOpen(true);
       return;
     }
@@ -373,11 +374,22 @@ export function CollectionsPage() {
               ? new Date(value).toISOString()
               : ""
             : value;
-    const updated = await pb.collection(selected.name).update(record.id, {
-      [field.name]: payload,
-    });
-    setRecords((current) => current.map((item) => (item.id === record.id ? updated : item)));
-    toast.success(`${field.name} updated.`);
+    const previous = record[field.name];
+    setRecords((current) =>
+      current.map((item) => (item.id === record.id ? { ...item, [field.name]: payload } : item)),
+    );
+    try {
+      const updated = await pb.collection(selected.name).update(record.id, {
+        [field.name]: payload,
+      });
+      setRecords((current) => current.map((item) => (item.id === record.id ? updated : item)));
+      toast.success(`${field.name} updated.`);
+    } catch (err) {
+      setRecords((current) =>
+        current.map((item) => (item.id === record.id ? { ...item, [field.name]: previous } : item)),
+      );
+      throw err;
+    }
   }
 
   async function deleteRecord(record: Record<string, any>) {
@@ -977,11 +989,7 @@ function FieldValue({ value, type }: { value: any; type: string }) {
 
 function initialCellValue(field: Field, value: any): string {
   if (value === null || value === undefined) return "";
-  if (field.type === "date") {
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) return String(value).replace(" ", "T").slice(0, 16);
-    return date.toISOString().slice(0, 16);
-  }
+  if (field.type === "date") return toLocalDateTime(value);
   return String(value);
 }
 

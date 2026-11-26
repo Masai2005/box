@@ -29,12 +29,105 @@ Download it, start it, and you have somewhere to build.
 Made for side projects, internal tools, prototypes, mobile app backends and small products that need a real backend
 without a platform bill.
 
-## Quick start
+## Install from a release
 
-### 1. Get the binary
+Every release ships one archive per platform. Download the archive that matches your machine from the
+[releases page](https://github.com/ekilie/box/releases/latest), together with `checksums.txt`.
 
-Download the release for your platform from
-[github.com/ekilie/box/releases](https://github.com/ekilie/box/releases), or build it from source:
+| Platform | Archive |
+|---|---|
+| macOS, Apple Silicon | `ekilie-box_<version>_darwin_arm64.zip` |
+| macOS, Intel | `ekilie-box_<version>_darwin_amd64.zip` |
+| Linux, x86_64 | `ekilie-box_<version>_linux_amd64.zip` |
+| Linux, ARM64 | `ekilie-box_<version>_linux_arm64.zip` |
+| Windows, x64 | `ekilie-box_<version>_windows_amd64.zip` |
+| Windows, ARM64 | `ekilie-box_<version>_windows_arm64.zip` |
+
+You can also download the latest matching archive with GitHub CLI:
+
+```bash
+gh release download --repo ekilie/box --pattern '*darwin_arm64.zip' --pattern 'checksums.txt'
+```
+
+Change the archive pattern to match your platform.
+
+### 1. Unpack the archive
+
+macOS and Linux:
+
+```bash
+unzip ekilie-box_<version>_<os>_<arch>.zip
+chmod +x ekilie-box
+```
+
+Windows PowerShell:
+
+```powershell
+Expand-Archive .\ekilie-box_<version>_windows_amd64.zip -DestinationPath .
+```
+
+### 2. Verify the download
+
+From the folder containing the archive and `checksums.txt`, filter the checksum file to the archive you downloaded:
+
+```bash
+# macOS, replace the pattern with your archive name
+grep 'darwin_arm64.zip' checksums.txt | shasum -a 256 -c -
+
+# Linux, replace the pattern with your archive name
+grep 'linux_amd64.zip' checksums.txt | sha256sum -c -
+```
+
+### 3. Create the owner account
+
+There is no public signup. The first account owns the instance.
+
+macOS and Linux:
+
+```bash
+./ekilie-box superuser upsert you@example.com 'a-strong-password'
+```
+
+Windows:
+
+```powershell
+.\ekilie-box.exe superuser upsert you@example.com 'a-strong-password'
+```
+
+### 4. Start Ekilie Box
+
+macOS and Linux:
+
+```bash
+./ekilie-box serve
+```
+
+Windows:
+
+```powershell
+.\ekilie-box.exe serve
+```
+
+Open **http://127.0.0.1:8090/** and sign in.
+
+```
+Console:  http://127.0.0.1:8090/
+API:      http://127.0.0.1:8090/api/
+```
+
+Your data and uploads are created in `ekilie_box_data` beside the binary.
+
+### macOS Gatekeeper
+
+Release binaries are not Apple-notarized. If macOS blocks the first launch, remove the quarantine flag once:
+
+```bash
+xattr -d com.apple.quarantine ./ekilie-box
+```
+
+## Quick start from source
+
+### 1. Build the binary
 
 ```bash
 git clone https://github.com/ekilie/box.git
@@ -80,11 +173,14 @@ That is the whole setup. Your data and uploads are created in `ekilie_box_data` 
 ### Console
 
 - Dashboard with instance health, database size, collections, users, backups, cron jobs and recent errors.
-- Collection and record management with filters, sorting, pagination, relations and file uploads.
+- Collection and record management with filters, sorting, pagination, relations, inline create, JSON validation and file uploads.
+- Collection editor with schema diffs, full field options, OAuth2 providers, index suggestions and view-query preview.
 - URL-addressable record editor, so you can link directly to a row.
 - Command palette (`Cmd/Ctrl+K`), collapsible icon sidebar (`Cmd/Ctrl+B`), light and dark themes.
-- Logs with filters, volume charts and a live tail.
-- API explorer, schema view and realtime inspector.
+- Logs with saved filters, request detail, volume charts and a live tail.
+- Storage usage, file replace/delete, import diffs and backup schedule controls.
+- API explorer, generated API docs, schema relation graph and realtime inspector.
+- Observability, status, audit, auth and migration views.
 - SQL console with schema browsing, saved queries and CSV export.
 - Application, mail, storage, backup, cron, token, import and export settings.
 - Crons: create and run scheduled HTTP requests, and trigger jobs registered in code.
@@ -246,6 +342,10 @@ GET /api/...      -> REST, realtime and settings APIs
 
 `--publicDir` can override the embedded console with a directory on disk, which is useful when debugging a Vite
 build.
+
+## Control plane
+
+Ekilie Box is deliberately a single-app product. The separate control-plane design for multiple instances, deploys, domains, secrets and teams lives in [docs/control-plane.md](docs/control-plane.md).
 
 ## License
 
